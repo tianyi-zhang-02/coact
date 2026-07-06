@@ -1,22 +1,20 @@
 # coact
 
-**Let Claude Code and Codex work in the same repo — safely, controllably, cheaply.**
+**Govern multiple coding agents working in one repository.**
 
-Most tools connect two coding agents by wiring a message bus between their live
-sessions and letting them run with permissions disabled. coact takes the
-opposite stance: it treats two concurrent agents as something to **govern**, not
-just connect.
+coact is the governance core for multi-agent coding. It turns a working
+directory into a coordinated, auditable workspace that two or more agents
+(e.g. Claude Code and Codex) can share without corrupting each other's work,
+and ships as a single static binary (Go, zero runtime dependencies).
 
-> **AgentBridge connects two agents. coact governs them.**
-
-coact is a single static binary (Go, zero runtime dependencies) that turns a
-working directory into a coordinated, auditable workspace two agents can share
-without corrupting each other's work.
+Getting agents to talk to each other is the easy part. coact is built for the
+harder problem underneath: making concurrent agents **safe, controllable, and
+cheap** to run against the same files.
 
 ## Why
 
-Running two agents in one directory raises three problems that a message bus
-doesn't solve. coact is organized around them:
+Running several agents in one directory raises three problems coact is
+organized around:
 
 - **Security** — each agent works in its own `git` worktree by default;
   writes are scoped by a capability policy; protected paths need a human gate;
@@ -29,9 +27,9 @@ doesn't solve. coact is organized around them:
   zero tokens), not in the agents' context windows. Concurrency and real-time
   messaging are opt-in, not the always-on baseline.
 
-Messaging (the AgentBridge job — real-time cross-review, quota relay) is an
-**optional plane on top**, and every message that crosses is policy-gated and
-journaled.
+Real-time messaging between agents (cross-review, hand-offs) is an **optional
+plane on top** — and every message that crosses is policy-gated and journaled,
+so it never bypasses the governance core.
 
 ## Status
 

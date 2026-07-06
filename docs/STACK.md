@@ -9,12 +9,10 @@ in Go and ships as **one static binary with zero runtime dependencies**.
 
 Rationale, ranked by the project's priorities:
 
-1. **Easy install is a feature, and a competitive wedge.** The nearest prior
-   tool (AgentBridge) requires the Bun runtime, a global npm install, and a
-   plugin-marketplace registration, with a documented "installed but won't run"
-   failure mode. A Go binary installs in one line (`brew`, `curl | sh`,
-   `go install`) with no runtime to manage. The tools developers actually keep
-   — ripgrep, `gh`, fzf, lazygit — are single binaries for this reason.
+1. **Easy install is a feature.** A Go binary installs in one line (`brew`,
+   `curl | sh`, `go install`) with no runtime to manage — no Node, Bun, or
+   Python, and nothing to register. The developer tools that actually stick —
+   ripgrep, `gh`, fzf, lazygit — are single binaries for this reason.
 2. **Right shape for the workload.** A CLI plus a long-lived presence sidecar
    and daemon maps cleanly onto goroutines and signal handling in one process.
 3. **The substrate is filesystem primitives.** Atomic create (`O_EXCL`), atomic
@@ -53,8 +51,8 @@ practical. Consequences of that choice in v0:
 The one place another ecosystem is genuinely stronger is the messaging plane
 (MCP channel + Codex app-server protocol). Plan: keep the core pure Go; if the
 Go MCP/Codex integration proves costly, ship messaging as a **separate opt-in
-sidecar** (possibly reusing AgentBridge's bus) rather than pulling that runtime
-into the binary everyone installs. Polyglot only at the optional edge.
+sidecar** rather than pulling that runtime into the binary everyone installs.
+Polyglot only at the optional edge.
 
 ## Distribution
 
