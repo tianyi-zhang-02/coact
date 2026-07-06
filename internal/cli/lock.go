@@ -65,15 +65,11 @@ func cmdLock(args []string) int {
 func cmdUnlock(args []string) int {
 	fs := flag.NewFlagSet("unlock", flag.ContinueOnError)
 	agentFlag := fs.String("agent", "", "participant id")
+	all := fs.Bool("all", false, "release every lock you hold")
 	positionals, err := parseInterspersed(fs, args)
 	if err != nil {
 		return 2
 	}
-	if len(positionals) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: coact unlock [--agent id] <path>")
-		return 2
-	}
-	path := positionals[0]
 
 	p, cfg, ok := loadProject()
 	if !ok {
@@ -81,11 +77,26 @@ func cmdUnlock(args []string) int {
 	}
 	agent := agentID(*agentFlag)
 	m := lockmgr.New(p, cfg)
-	if err := m.Release(agent, path); err != nil {
+
+	if *all {
+		n, err := m.ReleaseAll(agent)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "coact: %v\n", err)
+			return 1
+		}
+		fmt.Printf("released %d lock(s) held by %s\n", n, agent)
+		return 0
+	}
+
+	if len(positionals) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: coact unlock [--agent id] <path>   (or --all)")
+		return 2
+	}
+	if err := m.Release(agent, positionals[0]); err != nil {
 		fmt.Fprintf(os.Stderr, "coact: %v\n", err)
 		return 1
 	}
-	fmt.Printf("unlocked %s\n", path)
+	fmt.Printf("unlocked %s\n", positionals[0])
 	return 0
 }
 

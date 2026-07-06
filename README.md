@@ -45,18 +45,16 @@ coact doctor      # verify: checks the wiring and self-tests enforcement
 agent** — it plants a lock and checks that the gate blocks a conflict, allows a
 free path, and gates protected paths.
 
-Then give each agent an identity and launch it in its own terminal:
+Then launch each agent in its own terminal — one command each:
 
 ```sh
-# terminal 1 — Claude Code (enforcement is automatic via the wired hook)
-export COACT_AGENT=claude
-coact sidecar &   # keep this session's presence live
-claude
-
-# terminal 2 — Codex (self-enforces via the contract in AGENTS.md)
-export COACT_AGENT=codex
-codex
+coact claude      # terminal 1 — Claude Code, session managed by coact
+coact codex       # terminal 2 — Codex
 ```
+
+`coact claude` sets the identity, keeps presence live while the agent runs, and
+releases the session's locks when it exits — no background process to manage.
+(You can still do it by hand: `export COACT_AGENT=claude; coact sidecar &; claude`.)
 
 coact adds a gate; it does **not** require `--dangerously-skip-permissions`, and
 the hook **fails open** — if coact ever errors, your editing still works. Remove
@@ -93,12 +91,13 @@ coact log         # the full audit trail
 | `coact init` | Wire the hook + contracts in this repo |
 | `coact doctor` | Check setup and self-test enforcement (no agent needed) |
 | `coact deinit` | Remove coact's wiring (`--purge` also removes `.coact/`) |
+| `coact claude` / `coact codex` | Launch an agent with its coact session managed |
 | `coact status` | Live participants, current tasks, active locks |
 | `coact log` | Recent journal events (oversight view) |
 | `coact board` | List tasks and owners |
 | `coact task add "<t>"` | Add a task to the board |
 | `coact claim <id>` / `done <id>` | Claim / complete a task |
-| `coact lock <path>` / `unlock <path>` | Advisory write-intent lock (prefix-aware) |
+| `coact lock <path>` / `unlock <path>` | Advisory write-intent lock (`unlock --all` frees all yours) |
 | `coact policy check <path>` / `show` | Test or view the write policy |
 | `coact sidecar` | Per-session presence heartbeat |
 

@@ -377,6 +377,31 @@ func (m *Manager) Release(agent, rawPath string) error {
 	return nil
 }
 
+// ReleaseAll drops every lock held by agent (e.g. at session end) and returns
+// how many were released.
+func (m *Manager) ReleaseAll(agent string) (int, error) {
+	if err := m.acquireRegistry(); err != nil {
+		return 0, err
+	}
+	defer m.releaseRegistry()
+
+	locks, err := m.liveScan()
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, sl := range locks {
+		if sl.lock.Owner != agent {
+			continue
+		}
+		if os.Remove(sl.file) == nil {
+			n++
+			m.journal(agent, "lock.release", map[string]string{"path": sl.lock.Path, "reason": "session_end"})
+		}
+	}
+	return n, nil
+}
+
 // List returns all live locks (excluding the registry meta-lock).
 func (m *Manager) List() ([]Lock, error) {
 	stored, err := m.liveScan()

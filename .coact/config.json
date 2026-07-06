@@ -1,0 +1,31 @@
+{
+  "version": "0.1",
+  "mode": "shared",
+  "agents": [
+    {
+      "id": "claude",
+      "adapter": "claude-code"
+    },
+    {
+      "id": "codex",
+      "adapter": "codex"
+    }
+  ],
+  "locks": {
+    "default_ttl_seconds": 900,
+    "heartbeat_divisor": 3,
+    "registry_lock_ttl_seconds": 5
+  },
+  "presence": {
+    "mode": "sidecar",
+    "ttl_seconds": 60,
+    "interval_seconds": 20
+  },
+  "policy": {
+    "on_conflict": "block",
+    "allow_steal_expired": true,
+    "protected_paths": [
+      ".coact/**"
+    ]
+  }
+}

@@ -1,0 +1,97 @@
+package cli
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/tianyi-zhang-02/coact/internal/config"
+	"github.com/tianyi-zhang-02/coact/internal/journal"
+	"github.com/tianyi-zhang-02/coact/internal/lockmgr"
+	"github.com/tianyi-zhang-02/coact/internal/presence"
+	"github.com/tianyi-zhang-02/coact/internal/project"
+)
+
+func cmdClaude(args []string) int { return launchAgent("claude", "claude", args) }
+func cmdCodex(args []string) int  { return launchAgent("codex", "codex", args) }
+
+func launchAgent(agent, binary string, args []string) int {
+	p, cfg, ok := loadProject()
+	if !ok {
+		return 1
+	}
+	bin, err := exec.LookPath(binary)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "coact: %q is not installed or not on your PATH\n", binary)
+		return 1
+	}
+	return runWrapped(p, cfg, agent, bin, args)
+}
+
+// runWrapped owns the agent's coact session in a single process: it registers
+// presence, heartbeats while the agent runs, forwards signals to the agent, and
+// on exit marks the session stopped and releases the agent's locks. This
+// replaces the manual `export COACT_AGENT=...; coact sidecar &; <agent>` dance.
+func runWrapped(p *project.Project, cfg *config.Config, agent, bin string, args []string) int {
+	iv := cfg.Presence.IntervalSeconds
+	if iv <= 0 {
+		iv = 20
+	}
+	_ = presence.Register(p.SessionDir(), agent, "working")
+	_ = journal.Append(p.JournalDir(), agent, "session.start", map[string]string{"mode": "launcher"})
+
+	stop := make(chan struct{})
+	go func() {
+		t := time.NewTicker(time.Duration(iv) * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-t.C:
+				_ = presence.Register(p.SessionDir(), agent, "working")
+			case <-stop:
+				return
+			}
+		}
+	}()
+
+	cmd := exec.Command(bin, args...)
+	cmd.Env = append(os.Environ(), "COACT_AGENT="+agent)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	if err := cmd.Start(); err != nil {
+		close(stop)
+		fmt.Fprintf(os.Stderr, "coact: could not start %s: %v\n", bin, err)
+		return 1
+	}
+	go func() {
+		for s := range sigCh {
+			_ = cmd.Process.Signal(s)
+		}
+	}()
+
+	runErr := cmd.Wait()
+
+	close(stop)
+	_ = presence.Register(p.SessionDir(), agent, "stopped")
+	_ = journal.Append(p.JournalDir(), agent, "session.stop", nil)
+	m := lockmgr.New(p, cfg)
+	if n, _ := m.ReleaseAll(agent); n > 0 {
+		fmt.Fprintf(os.Stderr, "coact: released %d lock(s) held by %s\n", n, agent)
+	}
+
+	if runErr != nil {
+		if ee, ok := runErr.(*exec.ExitError); ok {
+			return ee.ExitCode()
+		}
+		fmt.Fprintf(os.Stderr, "coact: %s exited abnormally: %v\n", agent, runErr)
+		return 1
+	}
+	return 0
+}
