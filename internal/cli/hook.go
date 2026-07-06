@@ -67,16 +67,12 @@ func hookClaude(args []string) int {
 	if !deny {
 		return 0
 	}
-	out := map[string]any{
-		"hookSpecificOutput": map[string]any{
-			"hookEventName":            "PreToolUse",
-			"permissionDecision":       "deny",
-			"permissionDecisionReason": reason,
-		},
-	}
-	b, _ := json.Marshal(out)
-	fmt.Println(string(b))
-	return 0
+	// Block via exit code 2 with the reason on stderr. Exit-2 blocking is
+	// honored across Claude Code versions, whereas the newer permissionDecision
+	// JSON is not recognized by older releases — so this keeps enforcement
+	// robust regardless of the installed version.
+	fmt.Fprintln(os.Stderr, reason)
+	return 2
 }
 
 // hookDecision decides whether to block an edit and why. It fails OPEN
