@@ -42,10 +42,20 @@ for the technology decisions.
 Working today:
 
 ```
-coact init      # scaffold .coact/ in the current repo
-coact status    # show board, live participants, and active locks
-coact lock <path> / coact unlock <path>   # advisory write-intent locks
+coact init                 # scaffold .coact/ in the current repo
+coact sidecar              # per-session presence heartbeat (run in background)
+coact status               # live participants, current tasks, active locks
+coact lock <path>          # advisory write-intent lock (prefix-aware conflicts)
+coact unlock <path>        # release a lock you hold
+coact task add "<title>"   # add a task to the shared board
+coact board                # list tasks and owners
+coact claim <id>           # claim a task (serialized; no double-claims)
+coact done <id>            # mark your task done
 ```
+
+Every one of these lands an event in the append-only journal, and locks are
+only stolen from a participant that is both past its TTL and not live per
+presence — so a long build or a long reasoning turn never loses its lock.
 
 ## Install
 

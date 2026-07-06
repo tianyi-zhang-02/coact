@@ -23,6 +23,16 @@ func Run(args []string) int {
 		return cmdLock(rest)
 	case "unlock":
 		return cmdUnlock(rest)
+	case "board":
+		return cmdBoard(rest)
+	case "claim":
+		return cmdClaim(rest)
+	case "done":
+		return cmdDone(rest)
+	case "task":
+		return cmdTask(rest)
+	case "sidecar":
+		return cmdSidecar(rest)
 	case "version", "--version", "-v":
 		return cmdVersion()
 	case "help", "--help", "-h":
@@ -71,19 +81,28 @@ Usage:
   coact <command> [flags]
 
 Commands:
-  init            Scaffold .coact/ in the current repository
-  status          Show live participants and active locks
-  lock <path>     Acquire an advisory write-intent lock
-  unlock <path>   Release a lock you hold
-  version         Print version
-  help            Show this help
+  init             Scaffold .coact/ in the current repository
+  status           Show live participants and active locks
+  lock <path>      Acquire an advisory write-intent lock
+  unlock <path>    Release a lock you hold
+  board            List tasks on the shared board
+  claim <id>       Claim a task from the board
+  done <id>        Mark a claimed task done
+  task add "<t>"   Add a task to the board
+  sidecar          Run the presence heartbeat for this session
+  version          Print version
+  help             Show this help
 
 Common flags:
-  --agent <id>    Participant id (default: $COACT_AGENT, else "human")
+  --agent <id>     Participant id (default: $COACT_AGENT, else "human")
 
 Examples:
   coact init
-  COACT_AGENT=claude coact lock src/api
+  export COACT_AGENT=claude
+  coact sidecar &          # keep this session live
+  coact task add "Add rate limiting"
+  coact claim T-001
+  coact lock src/api
   coact status
 `)
 }

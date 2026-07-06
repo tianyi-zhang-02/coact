@@ -48,7 +48,7 @@ func cmdLock(args []string) int {
 			fmt.Printf("available: %s\n", res.Path)
 		} else {
 			fmt.Printf("locked %s (%s) by %s\n", res.Path, res.Reason, agent)
-			_ = presence.Touch(p.SessionDir(), agent, "working")
+			_ = presence.Beat(p.SessionDir(), agent, "working", "")
 		}
 		return 0
 	}

@@ -33,9 +33,22 @@ func sessionPath(sessionDir, agent string) string {
 
 func nowRFC() string { return time.Now().UTC().Format(time.RFC3339) }
 
-// Touch updates (or creates) the session file for agent with a fresh
-// heartbeat, preserving started_at across beats.
-func Touch(sessionDir, agent, status string) error {
+// Register marks the current process as the owner of agent's session and writes
+// a fresh heartbeat. Used by the long-lived presence sidecar; the owner PID it
+// records is what liveness checks probe.
+func Register(sessionDir, agent, status string) error {
+	return write(sessionDir, agent, status, "", true)
+}
+
+// Beat refreshes agent's heartbeat (and optionally status / current task)
+// without claiming ownership: it preserves whatever owner PID is already on
+// file. Used by one-shot commands and by hook-only mode, so an ephemeral
+// `coact lock` process never overwrites the sidecar's PID with its own.
+func Beat(sessionDir, agent, status, task string) error {
+	return write(sessionDir, agent, status, task, false)
+}
+
+func write(sessionDir, agent, status, task string, own bool) error {
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
 		return err
 	}
@@ -44,9 +57,11 @@ func Touch(sessionDir, agent, status string) error {
 		_ = json.Unmarshal(data, s)
 	}
 	s.Agent = agent
-	s.PID = os.Getpid()
-	if cwd, err := os.Getwd(); err == nil {
-		s.Cwd = cwd
+	if own {
+		s.PID = os.Getpid()
+		if cwd, err := os.Getwd(); err == nil {
+			s.Cwd = cwd
+		}
 	}
 	if s.StartedAt == "" {
 		s.StartedAt = nowRFC()
@@ -54,6 +69,9 @@ func Touch(sessionDir, agent, status string) error {
 	s.HeartbeatAt = nowRFC()
 	if status != "" {
 		s.Status = status
+	}
+	if task != "" {
+		s.CurrentTask = task
 	}
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {

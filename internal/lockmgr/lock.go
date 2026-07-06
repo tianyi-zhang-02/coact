@@ -11,7 +11,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/coactdev/coact/internal/config"
 	"github.com/coactdev/coact/internal/journal"
+	"github.com/coactdev/coact/internal/metalock"
 	"github.com/coactdev/coact/internal/platform"
 	"github.com/coactdev/coact/internal/presence"
 	"github.com/coactdev/coact/internal/project"
@@ -113,34 +113,11 @@ func (m *Manager) acquireRegistry() error {
 	if err := os.MkdirAll(m.locksDir, 0o755); err != nil {
 		return err
 	}
-	path := filepath.Join(m.locksDir, registryLockName)
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-		if err == nil {
-			fmt.Fprintf(f, `{"pid":%d,"acquired_at":%q}`, os.Getpid(), nowRFC())
-			f.Close()
-			return nil
-		}
-		if !os.IsExist(err) {
-			return err
-		}
-		// Held: steal it if it is older than the registry TTL (crash recovery).
-		if info, statErr := os.Stat(path); statErr == nil {
-			if time.Since(info.ModTime()) > m.registryTTL {
-				os.Remove(path)
-				continue
-			}
-		}
-		if time.Now().After(deadline) {
-			return errors.New("coact: timed out acquiring the lock registry")
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
+	return metalock.Acquire(filepath.Join(m.locksDir, registryLockName), m.registryTTL, 10*time.Second)
 }
 
 func (m *Manager) releaseRegistry() {
-	os.Remove(filepath.Join(m.locksDir, registryLockName))
+	metalock.Release(filepath.Join(m.locksDir, registryLockName))
 }
 
 // --- scanning -------------------------------------------------------------
