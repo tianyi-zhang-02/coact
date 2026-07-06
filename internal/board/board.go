@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coactdev/coact/internal/platform"
+	"github.com/tianyi-zhang-02/coact/internal/platform"
 )
 
 var markerRe = regexp.MustCompile(`<!--\s*coact:\s*(.*?)\s*-->`)

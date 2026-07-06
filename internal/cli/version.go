@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/coactdev/coact/internal/buildinfo"
+	"github.com/tianyi-zhang-02/coact/internal/buildinfo"
 )
 
 func cmdVersion() int {

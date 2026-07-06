@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/coactdev/coact/internal/lockmgr"
-	"github.com/coactdev/coact/internal/presence"
+	"github.com/tianyi-zhang-02/coact/internal/lockmgr"
+	"github.com/tianyi-zhang-02/coact/internal/presence"
 )
 
 func cmdStatus(args []string) int {

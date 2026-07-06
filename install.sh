@@ -1,9 +1,9 @@
 #!/bin/sh
 # coact installer — downloads a prebuilt single binary for your platform.
-# Usage: curl -fsSL https://raw.githubusercontent.com/coactdev/coact/main/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/tianyi-zhang-02/coact/main/install.sh | sh
 set -eu
 
-REPO="coactdev/coact"
+REPO="tianyi-zhang-02/coact"
 BINARY="coact"
 INSTALL_DIR="${COACT_INSTALL_DIR:-/usr/local/bin}"
 

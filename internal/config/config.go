@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/coactdev/coact/internal/platform"
+	"github.com/tianyi-zhang-02/coact/internal/platform"
 )
 
 type Config struct {

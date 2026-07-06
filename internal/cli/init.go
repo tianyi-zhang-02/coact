@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/coactdev/coact/internal/config"
-	"github.com/coactdev/coact/internal/journal"
-	"github.com/coactdev/coact/internal/project"
+	"github.com/tianyi-zhang-02/coact/internal/config"
+	"github.com/tianyi-zhang-02/coact/internal/journal"
+	"github.com/tianyi-zhang-02/coact/internal/project"
 )
 
 func cmdInit(args []string) int {

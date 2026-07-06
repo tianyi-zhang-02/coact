@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coactdev/coact/internal/config"
-	"github.com/coactdev/coact/internal/project"
+	"github.com/tianyi-zhang-02/coact/internal/config"
+	"github.com/tianyi-zhang-02/coact/internal/project"
 )
 
 func TestConflictPaths(t *testing.T) {

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/coactdev/coact/internal/config"
-	"github.com/coactdev/coact/internal/lockmgr"
-	"github.com/coactdev/coact/internal/presence"
-	"github.com/coactdev/coact/internal/project"
+	"github.com/tianyi-zhang-02/coact/internal/config"
+	"github.com/tianyi-zhang-02/coact/internal/lockmgr"
+	"github.com/tianyi-zhang-02/coact/internal/presence"
+	"github.com/tianyi-zhang-02/coact/internal/project"
 )
 
 func cmdLock(args []string) int {

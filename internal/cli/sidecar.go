@@ -8,8 +8,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/coactdev/coact/internal/journal"
-	"github.com/coactdev/coact/internal/presence"
+	"github.com/tianyi-zhang-02/coact/internal/journal"
+	"github.com/tianyi-zhang-02/coact/internal/presence"
 )
 
 // cmdSidecar runs the per-session presence heartbeat until interrupted. An

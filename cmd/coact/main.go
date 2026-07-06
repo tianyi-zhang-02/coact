@@ -4,7 +4,7 @@ package main
 import (
 	"os"
 
-	"github.com/coactdev/coact/internal/cli"
+	"github.com/tianyi-zhang-02/coact/internal/cli"
 )
 
 func main() {

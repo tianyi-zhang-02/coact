@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coactdev/coact/internal/platform"
+	"github.com/tianyi-zhang-02/coact/internal/platform"
 )
 
 // DefaultTTLSeconds is the liveness window if none is configured.

@@ -63,10 +63,10 @@ Prebuilt single binary, no runtime needed (macOS, Linux, Windows):
 
 ```sh
 # from source (requires Go 1.22+)
-go install github.com/coactdev/coact/cmd/coact@latest
+go install github.com/tianyi-zhang-02/coact/cmd/coact@latest
 
 # or build locally
-git clone https://github.com/coactdev/coact && cd coact
+git clone https://github.com/tianyi-zhang-02/coact && cd coact
 go build -o coact ./cmd/coact
 ```
 

@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coactdev/coact/internal/board"
-	"github.com/coactdev/coact/internal/journal"
-	"github.com/coactdev/coact/internal/metalock"
-	"github.com/coactdev/coact/internal/presence"
-	"github.com/coactdev/coact/internal/project"
+	"github.com/tianyi-zhang-02/coact/internal/board"
+	"github.com/tianyi-zhang-02/coact/internal/journal"
+	"github.com/tianyi-zhang-02/coact/internal/metalock"
+	"github.com/tianyi-zhang-02/coact/internal/presence"
+	"github.com/tianyi-zhang-02/coact/internal/project"
 )
 
 // withBoardLock serializes board mutations under a dedicated meta-lock so two
