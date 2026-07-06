@@ -1,0 +1,19 @@
+# Build output
+/dist/
+/coact
+/coact.exe
+*.test
+
+# Go
+/vendor/
+
+# coact runtime state — coordination intent (config.json, board.md) is committed,
+# but per-run state is not.
+.coact/locks/
+.coact/session/
+.coact/journal/
+.coact/inbox/
+
+# Editor / OS
+.DS_Store
+*.swp
