@@ -34,7 +34,12 @@ func Find() (*Project, error) {
 	if err != nil {
 		return nil, err
 	}
-	dir := cwd
+	return FindFrom(cwd)
+}
+
+// FindFrom locates the project by walking up from start.
+func FindFrom(start string) (*Project, error) {
+	dir := start
 	for {
 		info, err := os.Stat(filepath.Join(dir, ".coact"))
 		if err == nil && info.IsDir() {

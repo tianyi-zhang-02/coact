@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/tianyi-zhang-02/coact/internal/config"
 	"github.com/tianyi-zhang-02/coact/internal/journal"
+	"github.com/tianyi-zhang-02/coact/internal/platform"
 	"github.com/tianyi-zhang-02/coact/internal/project"
 )
 
@@ -61,6 +63,12 @@ func cmdInit(args []string) int {
 		}
 	}
 
+	if wired, err := ensureClaudeHook(root); err != nil {
+		fmt.Fprintf(os.Stderr, "coact: could not wire Claude hook: %v\n", err)
+	} else if wired {
+		created = append(created, ".claude/settings.json (PreToolUse hook)")
+	}
+
 	ensureGitignore(root)
 	_ = journal.Append(p.JournalDir(), agentID(""), "session.start", map[string]string{"action": "init"})
 
@@ -75,16 +83,110 @@ func cmdInit(args []string) int {
 	}
 	fmt.Print(`
 next steps:
-  1. Wire each agent's contract (once):
-       Claude Code -> include .coact/adapters/claude.md in CLAUDE.md
-       Codex       -> include .coact/adapters/codex.md in AGENTS.md
-  2. Set a per-session id: export COACT_AGENT=claude   (or codex)
-  3. Coordinate:
-       coact lock <path>     # before editing
-       coact status          # see who holds what
-       coact unlock <path>   # when done
+  1. Claude Code's enforcement hook is wired in .claude/settings.json.
+     For Codex, include .coact/adapters/codex.md in your AGENTS.md.
+  2. Set a per-session id before launching each agent:
+       export COACT_AGENT=claude      (or codex)
+  3. Optionally keep the session live for accurate presence:
+       coact sidecar &
+  4. Coordinate and observe:
+       coact board / coact claim <id>   # divide the work
+       coact status                     # who holds what
+       coact log                        # audit trail
 `)
 	return 0
+}
+
+// ensureClaudeHook idempotently wires coact's PreToolUse gate into the repo's
+// .claude/settings.json, merging with any existing settings. Returns true if it
+// added the hook (false if already present).
+func ensureClaudeHook(root string) (bool, error) {
+	claudeDir := filepath.Join(root, ".claude")
+	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+		return false, err
+	}
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+
+	settings := map[string]any{}
+	if data, err := os.ReadFile(settingsPath); err == nil && len(strings.TrimSpace(string(data))) > 0 {
+		if err := json.Unmarshal(data, &settings); err != nil {
+			return false, fmt.Errorf(".claude/settings.json is not valid JSON: %w", err)
+		}
+	}
+
+	hooks, _ := settings["hooks"].(map[string]any)
+	if hooks == nil {
+		hooks = map[string]any{}
+	}
+	pre, _ := hooks["PreToolUse"].([]any)
+
+	for _, entry := range pre {
+		em, _ := entry.(map[string]any)
+		hs, _ := em["hooks"].([]any)
+		for _, h := range hs {
+			if hm, ok := h.(map[string]any); ok && isCoactHook(hm) {
+				return false, nil // already wired
+			}
+		}
+	}
+
+	entry := map[string]any{
+		"matcher": "Edit|Write|MultiEdit|NotebookEdit",
+		"hooks": []any{
+			map[string]any{
+				"type":    "command",
+				"command": coactBinary(),
+				"args":    []any{"hook", "claude"},
+			},
+		},
+	}
+	hooks["PreToolUse"] = append(pre, entry)
+	settings["hooks"] = hooks
+
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return false, err
+	}
+	data = append(data, '\n')
+	if err := platform.AtomicWrite(settingsPath, data, 0o644); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func isCoactHook(hm map[string]any) bool {
+	// Match the command string form (e.g. "coact hook claude")...
+	if c, _ := hm["command"].(string); strings.Contains(c, "coact") && strings.Contains(c, "hook") {
+		return true
+	}
+	// ...or the exec-form args signature, independent of the binary path.
+	if args, ok := hm["args"].([]any); ok {
+		var hasHook, hasClaude bool
+		for _, a := range args {
+			switch s, _ := a.(string); s {
+			case "hook":
+				hasHook = true
+			case "claude":
+				hasClaude = true
+			}
+		}
+		if hasHook && hasClaude {
+			return true
+		}
+	}
+	return false
+}
+
+// coactBinary returns an absolute path to the running coact binary so the wired
+// hook works whether or not coact is on PATH. Falls back to "coact".
+func coactBinary() string {
+	if exe, err := os.Executable(); err == nil {
+		if abs, err := filepath.Abs(exe); err == nil {
+			return abs
+		}
+		return exe
+	}
+	return "coact"
 }
 
 func exists(path string) bool {
