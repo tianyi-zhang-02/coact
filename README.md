@@ -137,6 +137,24 @@ use only portable filesystem operations (atomic create, atomic rename); the few
 OS-specific pieces (process-liveness checks) are isolated behind build tags in
 `internal/platform`.
 
+## Troubleshooting
+
+- **First, run `coact doctor`.** It pinpoints most problems and self-tests the
+  engine.
+- **An edit wasn't blocked.** Claude Code reads `.claude/settings.json` at
+  startup — restart it after `coact init`. Confirm the hook is wired with
+  `coact doctor`. Note enforcement is Claude-side; Codex is L1 (self-enforced via
+  `AGENTS.md`).
+- **"coact: command not found" from the hook, or the wired binary moved.** The
+  hook stores an absolute path to the binary. If you moved or reinstalled coact,
+  re-run `coact init`.
+- **An agent seems stuck, blocked on files it should own.** During a session an
+  agent accumulates locks on the files it edits. Free them with
+  `coact unlock --all` (the `coact claude`/`coact codex` launchers do this
+  automatically on exit).
+- **Watch what's happening live.** `coact status --watch`.
+- **Remove everything.** `coact deinit` (add `--purge` to also delete `.coact/`).
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
