@@ -20,6 +20,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
+          cache: false  # zero dependencies → no go.sum to key a cache on
       - name: Build
         run: go build ./...
       - name: Vet
@@ -34,6 +35,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.22"
+          cache: false  # zero dependencies → no go.sum to key a cache on
       - name: Cross-compile all targets
         run: |
           for pair in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
