@@ -17,6 +17,10 @@ func Run(args []string) int {
 	switch cmd {
 	case "init":
 		return cmdInit(rest)
+	case "deinit":
+		return cmdDeinit(rest)
+	case "doctor":
+		return cmdDoctor(rest)
 	case "status":
 		return cmdStatus(rest)
 	case "lock":
@@ -87,7 +91,9 @@ Usage:
   coact <command> [flags]
 
 Commands:
-  init             Scaffold .coact/ in the current repository
+  init             Scaffold .coact/ and wire the agents in this repository
+  doctor           Check the setup and self-test enforcement (no agent needed)
+  deinit           Remove coact's wiring (--purge also deletes .coact/)
   status           Show live participants and active locks
   lock <path>      Acquire an advisory write-intent lock
   unlock <path>    Release a lock you hold

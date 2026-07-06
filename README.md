@@ -37,10 +37,15 @@ so it never bypasses the governance core.
 Install coact (see below), then in your repository:
 
 ```sh
-coact init        # scaffolds .coact/ and wires the Claude Code enforcement hook
+coact init        # wires the Claude Code hook + writes the agent contracts
+coact doctor      # verify: checks the wiring and self-tests enforcement
 ```
 
-Give each agent an identity and launch it in its own terminal:
+`coact doctor` confirms coact works on your machine **without needing a second
+agent** — it plants a lock and checks that the gate blocks a conflict, allows a
+free path, and gates protected paths.
+
+Then give each agent an identity and launch it in its own terminal:
 
 ```sh
 # terminal 1 — Claude Code (enforcement is automatic via the wired hook)
@@ -48,10 +53,14 @@ export COACT_AGENT=claude
 coact sidecar &   # keep this session's presence live
 claude
 
-# terminal 2 — Codex (self-enforces via .coact/adapters/codex.md)
+# terminal 2 — Codex (self-enforces via the contract in AGENTS.md)
 export COACT_AGENT=codex
 codex
 ```
+
+coact adds a gate; it does **not** require `--dangerously-skip-permissions`, and
+the hook **fails open** — if coact ever errors, your editing still works. Remove
+all wiring any time with `coact deinit`.
 
 Divide the work on the shared board:
 
@@ -81,7 +90,9 @@ coact log         # the full audit trail
 
 | Command | Purpose |
 |---|---|
-| `coact init` | Scaffold `.coact/` and wire the Claude Code hook |
+| `coact init` | Wire the hook + contracts in this repo |
+| `coact doctor` | Check setup and self-test enforcement (no agent needed) |
+| `coact deinit` | Remove coact's wiring (`--purge` also removes `.coact/`) |
 | `coact status` | Live participants, current tasks, active locks |
 | `coact log` | Recent journal events (oversight view) |
 | `coact board` | List tasks and owners |
