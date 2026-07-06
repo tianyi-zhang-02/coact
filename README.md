@@ -13,16 +13,16 @@ cheap** to run against the same files.
 
 ## Why
 
-Running several agents in one directory raises three problems coact is
-organized around:
+Running several agents in one directory raises three problems coact is built
+around:
 
-- **Security** — each agent works in its own `git` worktree by default;
-  writes are scoped by a capability policy; protected paths need a human gate;
-  every action lands in an append-only journal. A prompt-injected or wrong agent
-  is contained and reviewable, not already in your files.
+- **Security** — writes are scoped and gated: an agent's edit is blocked when
+  another holds that file (enforced by a hook for Claude Code), and every action
+  lands in an append-only journal — so a wrong or prompt-injected agent is
+  contained and auditable, not already in your files. (Per-agent capability
+  policy and git-worktree isolation are on the roadmap.)
 - **Controllability** — the plan is an explicit task board you own and edit, not
-  an emergent chat between agents. Integration happens through merge gates you
-  approve. All state is plain, inspectable files.
+  an emergent chat between agents. All state is plain, inspectable files.
 - **Cost** — coordination lives in the filesystem (locks, board, journal —
   zero tokens), not in the agents' context windows. Concurrency and real-time
   messaging are opt-in, not the always-on baseline.
@@ -31,29 +31,75 @@ Real-time messaging between agents (cross-review, hand-offs) is an **optional
 plane on top** — and every message that crosses is policy-gated and journaled,
 so it never bypasses the governance core.
 
+## Quickstart
+
+Install coact (see below), then in your repository:
+
+```sh
+coact init        # scaffolds .coact/ and wires the Claude Code enforcement hook
+```
+
+Give each agent an identity and launch it in its own terminal:
+
+```sh
+# terminal 1 — Claude Code (enforcement is automatic via the wired hook)
+export COACT_AGENT=claude
+coact sidecar &   # keep this session's presence live
+claude
+
+# terminal 2 — Codex (self-enforces via .coact/adapters/codex.md)
+export COACT_AGENT=codex
+codex
+```
+
+Divide the work on the shared board:
+
+```sh
+coact task add "Build auth module"
+coact task add "Build API gateway"
+coact claim T-002     # claude takes auth
+coact claim T-003     # codex takes the gateway
+```
+
+Now they work in parallel. If one strays into files the other holds, coact stops
+it — for Claude the hook blocks the edit outright:
+
+```
+coact: src/gateway/router.go is locked by "codex" since 2026-07-06T21:09:32Z.
+Another agent is working there — coordinate via `coact status`.
+```
+
+Watch it at any time:
+
+```sh
+coact status      # live agents, their current task, and held locks
+coact log         # the full audit trail
+```
+
+## Commands
+
+| Command | Purpose |
+|---|---|
+| `coact init` | Scaffold `.coact/` and wire the Claude Code hook |
+| `coact status` | Live participants, current tasks, active locks |
+| `coact log` | Recent journal events (oversight view) |
+| `coact board` | List tasks and owners |
+| `coact task add "<t>"` | Add a task to the board |
+| `coact claim <id>` / `done <id>` | Claim / complete a task |
+| `coact lock <path>` / `unlock <path>` | Advisory write-intent lock (prefix-aware) |
+| `coact sidecar` | Per-session presence heartbeat |
+
+Locks are stolen only from a participant that is both past its TTL **and** not
+live per presence, so a long build or a long reasoning turn never loses its lock.
+
 ## Status
 
-Early. The coordination substrate is being built first. See
-[docs/SPEC.md](docs/SPEC.md) for the protocol and [docs/STACK.md](docs/STACK.md)
-for the technology decisions.
-
-Working today:
-
-```
-coact init                 # scaffold .coact/ in the current repo
-coact sidecar              # per-session presence heartbeat (run in background)
-coact status               # live participants, current tasks, active locks
-coact lock <path>          # advisory write-intent lock (prefix-aware conflicts)
-coact unlock <path>        # release a lock you hold
-coact task add "<title>"   # add a task to the shared board
-coact board                # list tasks and owners
-coact claim <id>           # claim a task (serialized; no double-claims)
-coact done <id>            # mark your task done
-```
-
-Every one of these lands an event in the append-only journal, and locks are
-only stolen from a participant that is both past its TTL and not live per
-presence — so a long build or a long reasoning turn never loses its lock.
+Works today: two-agent coordination (Claude Code + Codex), advisory locks with
+Claude Code hook enforcement, the task board, presence, and the journal — as a
+single cross-platform binary. On the roadmap: per-agent capability policy,
+git-worktree isolation with merge gates, more agent adapters, and the optional
+messaging plane. See [docs/ROADMAP.md](docs/ROADMAP.md),
+[docs/SPEC.md](docs/SPEC.md), and [docs/STACK.md](docs/STACK.md).
 
 ## Install
 

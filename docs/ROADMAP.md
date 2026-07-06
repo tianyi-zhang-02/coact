@@ -2,6 +2,13 @@
 
 Target ship: **2026-07-09** (3 days from 2026-07-06).
 
+> **Progress (2026-07-06):** ahead of schedule. Day 1 (enforcement hook +
+> init auto-wiring + `coact log`) and Day 2 (release pipeline validated
+> end-to-end, agent contracts, 30-way concurrency stress test) are done. The
+> full two-agent workflow passes in simulation, including the hook blocking a
+> stray edit. The one remaining gate before tagging `v0.1.0` is a **live
+> two-agent dogfood** — running real Claude Code + Codex sessions through coact.
+
 ## What "usable MVP" means
 
 The demo that must work end to end: **one agent is editing a path; another
