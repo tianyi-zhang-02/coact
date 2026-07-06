@@ -35,6 +35,8 @@ func Run(args []string) int {
 		return cmdSidecar(rest)
 	case "log":
 		return cmdLog(rest)
+	case "policy":
+		return cmdPolicy(rest)
 	case "hook":
 		return cmdHook(rest)
 	case "version", "--version", "-v":
@@ -95,6 +97,7 @@ Commands:
   task add "<t>"   Add a task to the board
   sidecar          Run the presence heartbeat for this session
   log              Show recent journal events (oversight view)
+  policy           Show or check write policy (check <path> | show)
   hook claude      PreToolUse gate for Claude Code (wired by init)
   version          Print version
   help             Show this help

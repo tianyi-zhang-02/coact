@@ -17,10 +17,11 @@ Running several agents in one directory raises three problems coact is built
 around:
 
 - **Security** — writes are scoped and gated: an agent's edit is blocked when
-  another holds that file (enforced by a hook for Claude Code), and every action
-  lands in an append-only journal — so a wrong or prompt-injected agent is
-  contained and auditable, not already in your files. (Per-agent capability
-  policy and git-worktree isolation are on the roadmap.)
+  another holds that file (enforced by a hook for Claude Code) or when policy
+  forbids it — protected paths need a human, and each agent can be confined to a
+  write scope. Every action lands in an append-only journal, so a wrong or
+  prompt-injected agent is contained and auditable. (Git-worktree isolation is
+  on the roadmap.)
 - **Controllability** — the plan is an explicit task board you own and edit, not
   an emergent chat between agents. All state is plain, inspectable files.
 - **Cost** — coordination lives in the filesystem (locks, board, journal —
@@ -87,6 +88,7 @@ coact log         # the full audit trail
 | `coact task add "<t>"` | Add a task to the board |
 | `coact claim <id>` / `done <id>` | Claim / complete a task |
 | `coact lock <path>` / `unlock <path>` | Advisory write-intent lock (prefix-aware) |
+| `coact policy check <path>` / `show` | Test or view the write policy |
 | `coact sidecar` | Per-session presence heartbeat |
 
 Locks are stolen only from a participant that is both past its TTL **and** not
@@ -95,11 +97,12 @@ live per presence, so a long build or a long reasoning turn never loses its lock
 ## Status
 
 Works today: two-agent coordination (Claude Code + Codex), advisory locks with
-Claude Code hook enforcement, the task board, presence, and the journal — as a
-single cross-platform binary. On the roadmap: per-agent capability policy,
-git-worktree isolation with merge gates, more agent adapters, and the optional
-messaging plane. See [docs/ROADMAP.md](docs/ROADMAP.md),
-[docs/SPEC.md](docs/SPEC.md), and [docs/STACK.md](docs/STACK.md).
+Claude Code hook enforcement, a capability policy (protected paths + per-agent
+write scopes), the task board, presence, and the journal — as a single
+cross-platform binary. On the roadmap: git-worktree isolation with merge gates,
+more agent adapters, and the optional messaging plane. See
+[docs/ROADMAP.md](docs/ROADMAP.md), [docs/SPEC.md](docs/SPEC.md), and
+[docs/STACK.md](docs/STACK.md).
 
 ## Install
 

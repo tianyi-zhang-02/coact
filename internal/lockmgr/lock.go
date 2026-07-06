@@ -21,6 +21,7 @@ import (
 	"github.com/tianyi-zhang-02/coact/internal/journal"
 	"github.com/tianyi-zhang-02/coact/internal/metalock"
 	"github.com/tianyi-zhang-02/coact/internal/platform"
+	"github.com/tianyi-zhang-02/coact/internal/policy"
 	"github.com/tianyi-zhang-02/coact/internal/presence"
 	"github.com/tianyi-zhang-02/coact/internal/project"
 )
@@ -41,9 +42,10 @@ type Lock struct {
 // Result describes the outcome of an Acquire or Check.
 type Result struct {
 	Acquired bool
-	Reason   string // acquired | reentrant | stolen | denied
-	Conflict *Lock  // set when denied
+	Reason   string // acquired | reentrant | stolen | denied | policy
+	Conflict *Lock  // set on a lock conflict (Reason=denied)
 	Path     string // normalized repo-relative path
+	Detail   string // human-readable reason (set on Reason=policy)
 }
 
 // Manager operates the lock files under a project's .coact/locks directory.
@@ -55,6 +57,7 @@ type Manager struct {
 	ttl         int
 	presenceTTL int
 	registryTTL time.Duration
+	policy      *policy.Engine
 }
 
 // New builds a Manager from a project and its config.
@@ -75,6 +78,7 @@ func New(p *project.Project, cfg *config.Config) *Manager {
 		ttl:         ttl,
 		presenceTTL: cfg.Presence.TTLSeconds,
 		registryTTL: regTTL,
+		policy:      policy.New(cfg),
 	}
 }
 
@@ -220,6 +224,22 @@ func (m *Manager) journal(agent, event string, fields map[string]string) {
 	_ = journal.Append(m.journalDir, agent, event, fields)
 }
 
+// policyDeny returns a denial Result if policy forbids agent writing rel, else
+// nil. It journals the denial only when doJournal is set (Acquire, not Check).
+func (m *Manager) policyDeny(agent, rel string, doJournal bool) *Result {
+	if m.policy == nil {
+		return nil
+	}
+	d := m.policy.Check(agent, rel)
+	if d.Allowed {
+		return nil
+	}
+	if doJournal {
+		m.journal(agent, "policy.deny", map[string]string{"path": rel, "reason": d.Reason})
+	}
+	return &Result{Acquired: false, Reason: "policy", Path: rel, Detail: d.Reason}
+}
+
 // --- public API -----------------------------------------------------------
 
 // Acquire attempts to take a write-intent lock on rawPath for agent.
@@ -227,6 +247,9 @@ func (m *Manager) Acquire(agent, rawPath string) (*Result, error) {
 	rel, err := m.rel(rawPath)
 	if err != nil {
 		return nil, err
+	}
+	if r := m.policyDeny(agent, rel, true); r != nil {
+		return r, nil
 	}
 	if err := m.acquireRegistry(); err != nil {
 		return nil, err
@@ -289,6 +312,9 @@ func (m *Manager) Check(agent, rawPath string) (*Result, error) {
 	rel, err := m.rel(rawPath)
 	if err != nil {
 		return nil, err
+	}
+	if r := m.policyDeny(agent, rel, false); r != nil {
+		return r, nil
 	}
 	if err := m.acquireRegistry(); err != nil {
 		return nil, err

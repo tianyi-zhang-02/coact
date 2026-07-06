@@ -22,8 +22,9 @@ type Config struct {
 }
 
 type AgentConfig struct {
-	ID      string `json:"id"`
-	Adapter string `json:"adapter"`
+	ID      string   `json:"id"`
+	Adapter string   `json:"adapter"`
+	Write   []string `json:"write,omitempty"` // globs this agent may write; empty = unrestricted
 }
 
 type LockConfig struct {
@@ -66,7 +67,10 @@ func Default() *Config {
 		Policy: PolicyConfig{
 			OnConflict:        "block",
 			AllowStealExpired: true,
-			ProtectedPaths:    []string{".coact/config.json", ".github/"},
+			// Protect coact's own coordination state from being rewritten by an
+			// agent. Add paths like ".github/workflows/**" or secrets here to
+			// require a human for them too.
+			ProtectedPaths: []string{".coact/**"},
 		},
 	}
 }

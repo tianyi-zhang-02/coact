@@ -53,8 +53,12 @@ func cmdLock(args []string) int {
 		return 0
 	}
 
-	c := res.Conflict
-	fmt.Fprintf(os.Stderr, "denied: %s is held by %q since %s\n", res.Path, c.Owner, c.AcquiredAt)
+	if res.Conflict != nil {
+		c := res.Conflict
+		fmt.Fprintf(os.Stderr, "denied: %s is held by %q since %s\n", res.Path, c.Owner, c.AcquiredAt)
+	} else {
+		fmt.Fprintf(os.Stderr, "denied: %s\n", res.Detail)
+	}
 	return 3
 }
 
