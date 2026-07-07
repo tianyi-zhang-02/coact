@@ -2,12 +2,16 @@
 
 Target ship: **2026-07-09** (3 days from 2026-07-06).
 
-> **Progress (2026-07-06):** ahead of schedule. Day 1 (enforcement hook +
-> init auto-wiring + `coact log`) and Day 2 (release pipeline validated
-> end-to-end, agent contracts, 30-way concurrency stress test) are done. The
-> full two-agent workflow passes in simulation, including the hook blocking a
-> stray edit. The one remaining gate before tagging `v0.1.0` is a **live
-> two-agent dogfood** — running real Claude Code + Codex sessions through coact.
+> **Progress (2026-07-06):** the MVP is functionally complete and went well
+> beyond the original 3-day scope in one session. Shipped: the Claude Code
+> enforcement hook (exit-2 block) with `init` auto-wiring; the capability +
+> policy engine; one-command UX (`coact doctor` self-test, `coact claude` /
+> `coact codex` launchers, `coact deinit`); lock cleanup (`unlock --all` +
+> release on session end); `coact status --watch`; a validated release pipeline;
+> all CI-green cross-platform. The only remaining gate before tagging `v0.1.0`
+> is a **live two-agent dogfood** — real Claude Code + Codex sessions, which
+> needs an authenticated terminal. See [ARCHITECTURE.md](ARCHITECTURE.md) for
+> the current design.
 
 ## What "usable MVP" means
 

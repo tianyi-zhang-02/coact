@@ -104,6 +104,31 @@ coact log         # the full audit trail
 Locks are stolen only from a participant that is both past its TTL **and** not
 live per presence, so a long build or a long reasoning turn never loses its lock.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    C["Claude Code"] -->|"PreToolUse hook · L2 hard-block"| CLI["coact — single binary"]
+    X["Codex"] -->|"AGENTS.md contract · L1 self-check"| CLI
+    CLI --> POL{"policy gate:<br/>protected paths + write scopes"}
+    subgraph FS[".coact/ — filesystem substrate (zero tokens)"]
+        LOCKS["locks/"]
+        BOARD["board.md"]
+        SESS["session/"]
+        JOUR["journal/"]
+    end
+    POL --> LOCKS
+    CLI --> BOARD
+    CLI --> SESS
+    CLI --> JOUR
+    JOUR --> HUMAN["Human oversight:<br/>status · log · doctor"]
+    BOARD --> HUMAN
+```
+
+Coordination lives in the filesystem (zero tokens); enforcement is per agent —
+Claude hard-blocks via the hook, Codex self-enforces via its contract. Full
+detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Status
 
 Works today: two-agent coordination (Claude Code + Codex), advisory locks with
@@ -111,8 +136,8 @@ Claude Code hook enforcement, a capability policy (protected paths + per-agent
 write scopes), the task board, presence, and the journal — as a single
 cross-platform binary. On the roadmap: git-worktree isolation with merge gates,
 more agent adapters, and the optional messaging plane. See
-[docs/ROADMAP.md](docs/ROADMAP.md), [docs/SPEC.md](docs/SPEC.md), and
-[docs/STACK.md](docs/STACK.md).
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ROADMAP.md](docs/ROADMAP.md),
+[docs/SPEC.md](docs/SPEC.md), and [docs/STACK.md](docs/STACK.md).
 
 ## Install
 

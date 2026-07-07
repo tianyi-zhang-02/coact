@@ -13,6 +13,34 @@ participant.
 
 ---
 
+## Implementation status (v0.1)
+
+This spec is the design target. What ships today:
+
+| Spec area | Status | Code |
+|---|---|---|
+| §1 Directory layout | built | `internal/project` |
+| §2 Lock protocol (registry-serialized acquire, TTL, presence-gated steal) | built | `internal/lockmgr`, `internal/metalock` |
+| §3 Task board | built | `internal/board` |
+| §4 Messaging (inbox) | planned | `.coact/inbox/` reserved, not wired |
+| §5 Presence & heartbeat | built | `internal/presence` (+ sidecar and launcher) |
+| §6 Journal | built | `internal/journal` |
+| §7 Config | built | `internal/config` |
+| §8 Enforcement L0/L1/L2 | built | Claude L2 hook, Codex L1 contract, `internal/policy` capability gating |
+| §9 Worktree mode | planned | — |
+
+Where the implementation currently diverges from the text below:
+
+- **Config is `.coact/config.json` (JSON), not the YAML shown in §7** — to keep
+  the binary dependency-free (see [STACK.md](STACK.md)).
+- **The L2 block (§8) is delivered as exit code 2 + stderr**, which every Claude
+  Code version honors, rather than the newer `permissionDecision` JSON.
+- Worktree mode (§9) and the optional broker (§0/§7) are not built.
+
+For the component map and diagrams, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+---
+
 ## 0. Design principles
 
 1. **The filesystem is the only shared medium.** No *central* daemon or broker
