@@ -1,0 +1,74 @@
+# Security model
+
+CoAct is itself a security-adjacent tool: it wires a hook into your Claude Code
+settings and runs on every edit. This document states what it does, what it
+guarantees, and what it deliberately does not.
+
+## What CoAct is (and isn't)
+
+CoAct coordinates **semi-trusted** agents — it defends against agents making
+mistakes, wandering into each other's files, or acting on a prompt injection. It
+is **not a sandbox** and does not defend against a determined local attacker who
+already controls your account, your `$PATH`, or the coact binary itself. Agents
+still run with whatever permissions you give them; CoAct adds a coordination and
+audit layer, it does not confine the processes.
+
+## Trust boundary — what CoAct touches
+
+Running `coact init` writes only inside the repository:
+
+- `.coact/` — all coordination state (locks, board, session, journal, config).
+- `.claude/settings.json` — merged (existing keys preserved) to add one
+  `PreToolUse` hook.
+- `CLAUDE.md`, `AGENTS.md` — a marked contract block appended.
+- `.gitignore` — coact runtime-state entries appended.
+
+Nothing else is modified. `coact deinit` removes all of it; `--purge` also
+removes `.coact/` (and refuses to `RemoveAll` any directory not named `.coact`).
+
+## The enforcement hook
+
+- The hook command is the **coact binary itself**, pinned by absolute path, with
+  fixed args `hook claude`. `coact doctor` prints the exact wired command so you
+  can verify it.
+- It **fails open**: on any error, or in a repo without coact, it returns exit 0
+  and the edit proceeds. A coact bug can never brick your editing. The tradeoff
+  is that enforcement is not *guaranteed* under coact failure — CoAct chooses
+  availability over hard enforcement.
+- It does **not** require `--dangerously-skip-permissions`. It runs alongside
+  Claude Code's normal permission flow and only ever *adds* a denial.
+
+## Enforcement guarantees and limits
+
+- **Claude Code (L2)** — edits are hard-blocked via the hook (exit 2).
+- **Codex (L1)** — no pre-write hook exists, so it self-enforces from the
+  contract in `AGENTS.md`. This is advisory: a non-cooperating Codex session is
+  not mechanically stopped.
+- A pool is only as safe as its weakest **live** participant. Mixing an L1 agent
+  with an L2 agent on a shared tree lowers the shared-resource guarantee to L1;
+  worktree isolation (roadmap) is the answer as lower-tier agents join.
+
+## Design safeguards
+
+- **No shell execution.** CoAct never invokes `sh -c`/`bash -c`; subprocesses
+  (`git`, the agent binary) use `exec.Command` with fixed or pass-through args —
+  no command-injection surface.
+- **No network.** The binary makes no network calls.
+- **Path containment.** Lockable paths are normalized and rejected if they
+  escape the repo root; lock files are content-hashed, not path-named; agent
+  identifiers are restricted to `[a-z0-9_-]` so they cannot traverse out of
+  `.coact/session/`; every `Remove`/`RemoveAll` is bounded to `.coact/`.
+- **Atomic, auditable state.** All state is written atomically (temp + rename)
+  and is plain text; every significant action is appended to the journal.
+
+## Auditing and removing
+
+- `coact doctor` — shows the wired hook command and self-tests the engine.
+- `coact log` / `coact status` — the full audit trail and live state.
+- `coact deinit` — removes every trace of CoAct's wiring.
+
+## Reporting a vulnerability
+
+Please open a private security advisory on the GitHub repository (Security →
+Report a vulnerability) rather than a public issue. Include a minimal
+reproduction and the coact version (`coact version`).

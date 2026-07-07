@@ -53,6 +53,7 @@ func hookClaude(args []string) int {
 	if e := os.Getenv("COACT_AGENT"); e != "" {
 		agent = e
 	}
+	agent = sanitizeAgent(agent)
 
 	data, err := io.ReadAll(os.Stdin)
 	if err != nil {

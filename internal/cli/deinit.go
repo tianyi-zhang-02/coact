@@ -38,7 +38,11 @@ func cmdDeinit(args []string) int {
 		}
 	}
 	if *purge {
-		if err := os.RemoveAll(p.CoactDir()); err != nil {
+		dir := p.CoactDir()
+		if filepath.Base(dir) != ".coact" {
+			// Belt-and-suspenders: never RemoveAll anything not named .coact.
+			fmt.Fprintln(os.Stderr, "coact: refusing to purge a directory not named .coact")
+		} else if err := os.RemoveAll(dir); err != nil {
 			fmt.Fprintf(os.Stderr, "coact: removing .coact: %v\n", err)
 		} else {
 			removed = append(removed, ".coact/ (purged)")

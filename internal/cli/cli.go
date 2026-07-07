@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // Run dispatches a subcommand and returns a process exit code.
@@ -80,12 +81,29 @@ func parseInterspersed(fs *flag.FlagSet, args []string) ([]string, error) {
 
 func agentID(flagVal string) string {
 	if flagVal != "" {
-		return flagVal
+		return sanitizeAgent(flagVal)
 	}
 	if e := os.Getenv("COACT_AGENT"); e != "" {
-		return e
+		return sanitizeAgent(e)
 	}
 	return "human"
+}
+
+// sanitizeAgent restricts an agent id to the SPEC §1.1 charset [a-z0-9_-]. The
+// id is used in session filenames (session/<agent>.json), so this prevents a
+// stray or hostile value (e.g. "../../etc") from escaping the .coact directory.
+func sanitizeAgent(id string) string {
+	id = strings.ToLower(strings.TrimSpace(id))
+	var b strings.Builder
+	for _, r := range id {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			b.WriteRune(r)
+		}
+	}
+	if b.Len() == 0 {
+		return "agent"
+	}
+	return b.String()
 }
 
 func printUsage() {

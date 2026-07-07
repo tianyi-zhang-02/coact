@@ -4,11 +4,14 @@
 
 **Govern multiple coding agents working in one repository.**
 
-I use Claude Code and Codex together every day, and two things kept getting in
-the way. Whenever I let them work on the same project, I had to copy-paste
-between them and referee who was allowed to touch what. And when one hit its
-plan's usage limit, I wanted to hand the task straight to the other. CoAct is
-the coordination layer for exactly that: it removes the copy-paste and the
+I bounce between Claude Code and Codex on the same project all day, because
+they're complementary. Claude Code is the stronger partner for system design and
+the back-and-forth feels more natural (it's also the more opinionated of the
+two); Codex is a solid executor, if a bit mechanical to drive. So I use one to
+plan and shape and the other to grind out the work — on the same files. By hand
+that means copy-pasting between them and refereeing who touches what, and when
+one runs out of plan usage I want to hand the task straight to the other. CoAct
+is the coordination layer for exactly that: it removes the copy-paste and the
 collisions today, and is built toward the hand-off across plans.
 
 CoAct turns a working directory into a coordinated, auditable workspace that two
@@ -187,6 +190,13 @@ OS-specific pieces (process-liveness checks) are isolated behind build tags in
   automatically on exit).
 - **Watch what's happening live.** `coact status --watch`.
 - **Remove everything.** `coact deinit` (add `--purge` to also delete `.coact/`).
+
+## Security
+
+CoAct wires a hook that runs on every edit, so it takes its own safety
+seriously: no shell execution, no network, writes bounded to the repo, agent ids
+sanitized, the hook **fails open**, and everything removable with `coact deinit`.
+See [SECURITY.md](SECURITY.md) for the full model.
 
 ## License
 
