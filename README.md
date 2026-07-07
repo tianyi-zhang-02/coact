@@ -1,19 +1,27 @@
-# coact
+# CoAct
+
+[English](README.md) · [中文](README.zh-CN.md)
 
 **Govern multiple coding agents working in one repository.**
 
-coact is the governance core for multi-agent coding. It turns a working
-directory into a coordinated, auditable workspace that two or more agents
-(e.g. Claude Code and Codex) can share without corrupting each other's work,
-and ships as a single static binary (Go, zero runtime dependencies).
+I use Claude Code and Codex together every day, and two things kept getting in
+the way. Whenever I let them work on the same project, I had to copy-paste
+between them and referee who was allowed to touch what. And when one hit its
+plan's usage limit, I wanted to hand the task straight to the other. CoAct is
+the coordination layer for exactly that: it removes the copy-paste and the
+collisions today, and is built toward the hand-off across plans.
 
-Getting agents to talk to each other is the easy part. coact is built for the
+CoAct turns a working directory into a coordinated, auditable workspace that two
+or more agents (e.g. Claude Code and Codex) can share without corrupting each
+other's work. It ships as a single static binary (Go, zero runtime dependencies).
+
+Getting agents to talk to each other is the easy part. CoAct is built for the
 harder problem underneath: making concurrent agents **safe, controllable, and
 cheap** to run against the same files.
 
 ## Why
 
-Running several agents in one directory raises three problems coact is built
+Running several agents in one directory raises three problems CoAct is built
 around:
 
 - **Security** — writes are scoped and gated: an agent's edit is blocked when
@@ -34,14 +42,14 @@ so it never bypasses the governance core.
 
 ## Quickstart
 
-Install coact (see below), then in your repository:
+Install CoAct (see below), then in your repository:
 
 ```sh
 coact init        # wires the Claude Code hook + writes the agent contracts
 coact doctor      # verify: checks the wiring and self-tests enforcement
 ```
 
-`coact doctor` confirms coact works on your machine **without needing a second
+`coact doctor` confirms CoAct works on your machine **without needing a second
 agent** — it plants a lock and checks that the gate blocks a conflict, allows a
 free path, and gates protected paths.
 
@@ -56,8 +64,8 @@ coact codex       # terminal 2 — Codex
 releases the session's locks when it exits — no background process to manage.
 (You can still do it by hand: `export COACT_AGENT=claude; coact sidecar &; claude`.)
 
-coact adds a gate; it does **not** require `--dangerously-skip-permissions`, and
-the hook **fails open** — if coact ever errors, your editing still works. Remove
+CoAct adds a gate; it does **not** require `--dangerously-skip-permissions`, and
+the hook **fails open** — if CoAct ever errors, your editing still works. Remove
 all wiring any time with `coact deinit`.
 
 Divide the work on the shared board:
@@ -69,7 +77,7 @@ coact claim T-002     # claude takes auth
 coact claim T-003     # codex takes the gateway
 ```
 
-Now they work in parallel. If one strays into files the other holds, coact stops
+Now they work in parallel. If one strays into files the other holds, CoAct stops
 it — for Claude the hook blocks the edit outright:
 
 ```
@@ -90,7 +98,7 @@ coact log         # the full audit trail
 |---|---|
 | `coact init` | Wire the hook + contracts in this repo |
 | `coact doctor` | Check setup and self-test enforcement (no agent needed) |
-| `coact deinit` | Remove coact's wiring (`--purge` also removes `.coact/`) |
+| `coact deinit` | Remove CoAct's wiring (`--purge` also removes `.coact/`) |
 | `coact claude` / `coact codex` | Launch an agent with its coact session managed |
 | `coact status` | Live participants, current tasks, active locks |
 | `coact log` | Recent journal events (oversight view) |
