@@ -53,6 +53,44 @@ func FindFrom(start string) (*Project, error) {
 	}
 }
 
+// Resolve is like Find but worktree-aware: when run inside a linked git
+// worktree, coact's shared state lives in the MAIN worktree's .coact, so the
+// board, journal, and locks stay global across an agent's isolated worktrees.
+func Resolve() (*Project, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	return ResolveFrom(cwd)
+}
+
+// ResolveFrom resolves the project from start, mapping a linked worktree to its
+// main worktree's .coact and otherwise walking up for .coact.
+func ResolveFrom(start string) (*Project, error) {
+	if main := mainWorktreeRoot(start); main != "" {
+		if st, err := os.Stat(filepath.Join(main, ".coact")); err == nil && st.IsDir() {
+			return &Project{Root: main}, nil
+		}
+	}
+	return FindFrom(start)
+}
+
+// mainWorktreeRoot returns the main worktree's root if start is inside a linked
+// git worktree, else "". A linked worktree's git dir looks like
+// <main>/.git/worktrees/<name>.
+func mainWorktreeRoot(start string) string {
+	out, err := exec.Command("git", "-C", start, "rev-parse", "--absolute-git-dir").Output()
+	if err != nil {
+		return ""
+	}
+	gitDir := strings.TrimSpace(string(out))
+	parent := filepath.Dir(gitDir) // .../.git/worktrees
+	if filepath.Base(parent) == "worktrees" {
+		return filepath.Dir(filepath.Dir(parent)) // .../.git -> <main>
+	}
+	return ""
+}
+
 // Locate returns the directory where a new project should be initialized: the
 // git top-level if the current directory is inside a git repo, otherwise the
 // current directory.

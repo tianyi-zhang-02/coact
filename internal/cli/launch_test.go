@@ -29,7 +29,7 @@ func TestRunWrappedReleasesLocksAndStopsPresence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if code := runWrapped(p, cfg, "claude", writeStub(t, "#!/bin/sh\nexit 0\n"), nil); code != 0 {
+	if code := runWrapped(p, cfg, "claude", writeStub(t, "#!/bin/sh\nexit 0\n"), nil, ""); code != 0 {
 		t.Fatalf("runWrapped exit code = %d", code)
 	}
 
@@ -48,7 +48,7 @@ func TestRunWrappedReleasesLocksAndStopsPresence(t *testing.T) {
 func TestRunWrappedPropagatesExitCode(t *testing.T) {
 	p := setupProject(t)
 	cfg, _ := config.Load(p.ConfigPath())
-	if code := runWrapped(p, cfg, "claude", writeStub(t, "#!/bin/sh\nexit 7\n"), nil); code != 7 {
+	if code := runWrapped(p, cfg, "claude", writeStub(t, "#!/bin/sh\nexit 7\n"), nil, ""); code != 7 {
 		t.Fatalf("want exit code 7, got %d", code)
 	}
 }

@@ -26,6 +26,10 @@ func Run(args []string) int {
 		return cmdClaude(rest)
 	case "codex":
 		return cmdCodex(rest)
+	case "worktree":
+		return cmdWorktree(rest)
+	case "merge":
+		return cmdMerge(rest)
 	case "status":
 		return cmdStatus(rest)
 	case "lock":
@@ -116,8 +120,10 @@ Commands:
   init             Scaffold .coact/ and wire the agents in this repository
   doctor           Check the setup and self-test enforcement (no agent needed)
   deinit           Remove coact's wiring (--purge also deletes .coact/)
-  claude [args]    Launch Claude Code wired into coact (manages the session)
-  codex [args]     Launch Codex wired into coact (manages the session)
+  claude [args]    Launch Claude Code wired into coact (--worktree to isolate)
+  codex [args]     Launch Codex wired into coact (--worktree to isolate)
+  worktree         Manage per-agent git worktrees (add | list | rm)
+  merge <agent>    Merge an agent's coact/<agent> branch (stops on conflict)
   status           Show live participants and active locks
   lock <path>      Acquire an advisory write-intent lock
   unlock <path>    Release a lock you hold

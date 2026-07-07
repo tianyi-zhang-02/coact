@@ -96,7 +96,7 @@ func hookDecision(agent string, pl hookPayload) (deny bool, reason string) {
 	if dir == "" {
 		dir, _ = os.Getwd()
 	}
-	p, err := project.FindFrom(dir)
+	p, err := project.ResolveFrom(dir)
 	if err != nil {
 		return false, "" // coact not in use here → fail open
 	}

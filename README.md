@@ -95,6 +95,20 @@ coact status      # live agents, their current task, and held locks
 coact log         # the full audit trail
 ```
 
+### Isolation (worktree mode)
+
+By default both agents share the working tree and coordinate through locks. For
+stronger separation, give each agent its own git worktree and branch:
+
+```sh
+coact claude --worktree     # Claude works on branch coact/claude, isolated
+coact codex  --worktree     # Codex on branch coact/codex
+coact merge claude codex    # integrate — stops and shows conflicts for you
+```
+
+The board and journal stay shared across worktrees, edits can't collide (they're
+on separate branches), and you resolve any conflicts at merge time.
+
 ## Commands
 
 | Command | Purpose |
@@ -102,7 +116,9 @@ coact log         # the full audit trail
 | `coact init` | Wire the hook + contracts in this repo |
 | `coact doctor` | Check setup and self-test enforcement (no agent needed) |
 | `coact deinit` | Remove CoAct's wiring (`--purge` also removes `.coact/`) |
-| `coact claude` / `coact codex` | Launch an agent with its coact session managed |
+| `coact claude` / `coact codex` | Launch an agent (add `--worktree` to isolate) |
+| `coact worktree add/list/rm` | Per-agent isolated git worktrees |
+| `coact merge <agent>` | Merge an agent's branch (stops on conflict) |
 | `coact status` | Live participants, current tasks, active locks |
 | `coact log` | Recent journal events (oversight view) |
 | `coact board` | List tasks and owners |
@@ -144,9 +160,9 @@ detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 Works today: two-agent coordination (Claude Code + Codex), advisory locks with
 Claude Code hook enforcement, a capability policy (protected paths + per-agent
-write scopes), the task board, presence, and the journal — as a single
-cross-platform binary. On the roadmap: git-worktree isolation with merge gates,
-more agent adapters, and the optional messaging plane. See
+write scopes), the task board, presence, the journal, and opt-in git-worktree
+isolation with merge gates — as a single cross-platform binary. On the roadmap:
+more agent adapters and the optional messaging plane. See
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ROADMAP.md](docs/ROADMAP.md),
 [docs/SPEC.md](docs/SPEC.md), and [docs/STACK.md](docs/STACK.md).
 

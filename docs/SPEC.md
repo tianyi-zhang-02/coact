@@ -27,7 +27,7 @@ This spec is the design target. What ships today:
 | §6 Journal | built | `internal/journal` |
 | §7 Config | built | `internal/config` |
 | §8 Enforcement L0/L1/L2 | built | Claude L2 hook, Codex L1 contract, `internal/policy` capability gating |
-| §9 Worktree mode | planned | — |
+| §9 Worktree mode | built (basic) | `coact worktree` + `coact merge`, shared-state resolution |
 
 Where the implementation currently diverges from the text below:
 
@@ -35,7 +35,7 @@ Where the implementation currently diverges from the text below:
   the binary dependency-free (see [STACK.md](STACK.md)).
 - **The L2 block (§8) is delivered as exit code 2 + stderr**, which every Claude
   Code version honors, rather than the newer `permissionDecision` JSON.
-- Worktree mode (§9) and the optional broker (§0/§7) are not built.
+- The optional broker (§0/§7) is not built.
 
 For the component map and diagrams, see [ARCHITECTURE.md](ARCHITECTURE.md).
 

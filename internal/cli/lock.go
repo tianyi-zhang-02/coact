@@ -103,7 +103,7 @@ func cmdUnlock(args []string) int {
 // loadProject finds the project and loads its config, printing a helpful error
 // if the workspace is not initialized.
 func loadProject() (*project.Project, *config.Config, bool) {
-	p, err := project.Find()
+	p, err := project.Resolve()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "coact: %v\n", err)
 		return nil, nil, false

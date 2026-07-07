@@ -61,6 +61,31 @@ sequenceDiagram
 The hook **fails open**: on any error, or in a repo without coact, it returns
 exit 0 — a coact problem never blocks your editing.
 
+## Isolation: worktree mode
+
+Shared mode (above) coordinates edits on one working tree with advisory locks. In
+**worktree mode**, each agent works in its own `git worktree` on branch
+`coact/<agent>`, physically outside the main tree — so edits cannot collide and
+the shared-tree hook naturally no-ops (the paths fall outside the repo root, so
+`Acquire` fails open). Coordination shifts to the board (task ownership) and
+`coact merge`, which integrates a branch and **stops on conflict** for a human to
+resolve — the merge gate.
+
+`.coact/` stays shared: coact detects a linked worktree via git's
+`--absolute-git-dir` and resolves state to the main worktree, so the board,
+journal, and presence remain global across all of an agent's worktrees.
+
+```mermaid
+flowchart LR
+    subgraph WT["isolated worktrees"]
+        WC["coact/claude branch"]
+        WX["coact/codex branch"]
+    end
+    WC -->|coact merge| BASE["base branch (main worktree)"]
+    WX -->|coact merge| BASE
+    BASE -.->|conflict → human resolves| BASE
+```
+
 ## Components
 
 | Package | Responsibility |

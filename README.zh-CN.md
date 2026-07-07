@@ -86,6 +86,20 @@ coact status      # 在线的 agent、它们当前的任务、以及被持有的
 coact log         # 完整的审计记录
 ```
 
+### 隔离(worktree 模式)
+
+默认两个 agent 共享同一份工作树,通过锁来协调。想要更强的隔离,就给每个 agent 各自
+一个 git worktree 和分支:
+
+```sh
+coact claude --worktree     # Claude 在 coact/claude 分支上隔离工作
+coact codex  --worktree     # Codex 在 coact/codex 分支上
+coact merge claude codex    # 集成——遇到冲突会停下来并把冲突列给你看
+```
+
+任务板和 journal 在各 worktree 之间保持共享;因为在不同分支上,编辑不会互相踩踏,
+冲突留到合并时由你来解决。
+
 ## 命令
 
 | 命令 | 作用 |
@@ -93,7 +107,9 @@ coact log         # 完整的审计记录
 | `coact init` | 在本仓库接入 hook 和契约 |
 | `coact doctor` | 检查配置并自检强制执行(不需要 agent) |
 | `coact deinit` | 移除 CoAct 的接线(`--purge` 连 `.coact/` 一起删) |
-| `coact claude` / `coact codex` | 启动一个 agent,并托管它的 coact 会话 |
+| `coact claude` / `coact codex` | 启动一个 agent(加 `--worktree` 隔离) |
+| `coact worktree add/list/rm` | 每个 agent 独立的 git worktree |
+| `coact merge <agent>` | 合并某个 agent 的分支(遇冲突即停) |
 | `coact status` | 在线参与者、当前任务、活动的锁 |
 | `coact log` | 最近的 journal 事件(监督视图) |
 | `coact board` | 列出任务和归属 |
