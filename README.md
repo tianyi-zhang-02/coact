@@ -125,6 +125,14 @@ AgentBridge's real-time mid-turn push. `coact handoff` reassigns your active
 board tasks to the other agent, releases your locks, and sends the context; it's
 the explicit "I'm stopping / hitting my plan limit, take over" move.
 
+**Real-time push (experimental).** `coact channel claude` is a Claude Code
+*channel* (a pure-Go MCP server) that pushes the other agent's messages into
+Claude's session **mid-turn** and exposes a `reply` tool — closer to a live
+bridge than the turn-based inbox. It requires **Claude Code v2.1.80+**, is
+registered in `.mcp.json`, and launched with
+`claude --dangerously-load-development-channels server:coact-claude`. The
+Codex-side app-server bridge (so Codex also receives mid-turn) is next.
+
 ## Commands
 
 | Command | Purpose |
