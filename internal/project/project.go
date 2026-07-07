@@ -27,6 +27,7 @@ func (p *Project) JournalDir() string  { return filepath.Join(p.CoactDir(), "jou
 func (p *Project) AdaptersDir() string { return filepath.Join(p.CoactDir(), "adapters") }
 func (p *Project) ConfigPath() string  { return filepath.Join(p.CoactDir(), "config.json") }
 func (p *Project) BoardPath() string   { return filepath.Join(p.CoactDir(), "board.md") }
+func (p *Project) BriefPath() string   { return filepath.Join(p.CoactDir(), "brief.md") }
 
 // WorkRoot is the checkout where user paths should be interpreted. For the main
 // worktree this is Root; for linked worktrees it is the linked checkout while

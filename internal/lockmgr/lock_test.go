@@ -15,12 +15,12 @@ func TestConflictPaths(t *testing.T) {
 		a, b string
 		want bool
 	}{
-		{"src/api", "src/api", true},               // identical
-		{"src/api", "src/api/handler.go", true},     // parent/child
-		{"src/api/handler.go", "src/api", true},     // child/parent (symmetric)
-		{"src/api", "src/apidocs", false},           // shared string prefix, different segment
-		{"src/api", "src/web", false},               // disjoint
-		{".", "anything/here", true},                // root covers all
+		{"src/api", "src/api", true},            // identical
+		{"src/api", "src/api/handler.go", true}, // parent/child
+		{"src/api/handler.go", "src/api", true}, // child/parent (symmetric)
+		{"src/api", "src/apidocs", false},       // shared string prefix, different segment
+		{"src/api", "src/web", false},           // disjoint
+		{".", "anything/here", true},            // root covers all
 	}
 	for _, c := range cases {
 		if got := conflictPaths(c.a, c.b); got != c.want {

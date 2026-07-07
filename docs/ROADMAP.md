@@ -13,6 +13,13 @@ Target ship: **2026-07-09** (3 days from 2026-07-06).
 > needs an authenticated terminal. See [ARCHITECTURE.md](ARCHITECTURE.md) for
 > the current design.
 
+> **Progress (2026-07-07):** added the first local control center and managed
+> version layout. `coact` now opens a localhost UI by default while the original
+> CLI remains under `coact help`. The UI covers setup, brief, tasks, agents,
+> locks, messages, journal, launch commands, and versions. `coact update`,
+> `coact versions`, and `coact switch` manage side-by-side binaries under
+> `~/.coact` with checksum verification.
+
 ## What "usable MVP" means
 
 The demo that must work end to end: **one agent is editing a path; another
@@ -38,12 +45,30 @@ installs in one line, it's an MVP.
 
 ## Scope
 
-**In:** Claude Code + Codex, shared tree, advisory locks with Claude L2 hook
-enforcement, board, journal, status, real release.
+**In:** Claude Code + Codex + Gemini adapters, shared tree, advisory locks with
+Claude L2 hook enforcement, capability policy, board, journal, status, local UI,
+turn-based messaging, worktree mode + merge gates, and real release.
 
-**Out (v0.2+):** adapter registry / Gemini, capability-policy engine, worktree
-mode + merge gates, messaging plane, live TUI dashboard, visual/binary diffs.
-Listed in the README as "coming" so the MVP reads as _scoped_, not thin.
+**Out (v0.2+):** embedded live terminals, UI model switching, deeper real-time
+mid-turn control, autopilot, release signing, and visual/binary diffs.
+Listed in the README as "coming" so the first release reads as scoped, not thin.
+
+## v0.1.0 — Initial local control center
+
+The CLI remains the power-user surface, but the default path is now the local UI.
+The acceptance bar for the first public release:
+
+1. `coact` opens a local-only web control center; `coact ui --no-open` supports
+   headless use.
+2. The UI initializes a repo without shelling out, writes `.coact/brief.md`,
+   adds/claims/finishes tasks, sends inbox messages, and shows board/status/log.
+3. The UI never executes arbitrary shell; it binds only `127.0.0.1`/`localhost`
+   and additionally enforces a Host-header allowlist and a per-run CSRF token, so
+   a browser page cannot drive it.
+4. `coact update` downloads releases into `~/.coact/bin`, verifies SHA-256, and
+   switches only the managed `~/.coact/coact` shim.
+5. Version descriptions show channel, stability, feature support, and notes so a
+   user can choose stable/beta/experimental intentionally.
 
 ## Day-by-day
 

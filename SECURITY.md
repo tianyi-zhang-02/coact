@@ -48,12 +48,54 @@ removes `.coact/` (and refuses to `RemoveAll` any directory not named `.coact`).
   with an L2 agent on a shared tree lowers the shared-resource guarantee to L1;
   worktree isolation (roadmap) is the answer as lower-tier agents join.
 
+## Local control center (`coact ui`)
+
+`coact` with no arguments (and `coact ui`) starts a **local-only** web control
+center. Because a browser can reach any localhost server, binding to loopback is
+necessary but not sufficient; the server adds two defenses:
+
+- **Loopback bind + Host-header allowlist.** It listens only on
+  `127.0.0.1`/`localhost` and rejects any request whose `Host` header is not a
+  loopback name. This defeats DNS-rebinding, where a malicious page resolves its
+  own hostname to `127.0.0.1` — the rebound request still carries the attacker's
+  Host and is refused.
+- **Per-run CSRF token.** A random token is minted at startup, embedded in the
+  served page, and required on every mutating request. A cross-origin page cannot
+  read the token out of the same-origin HTML, so it cannot forge the header.
+  Read-only GETs are exempt: the same-origin policy already protects their
+  bodies, and they change nothing.
+
+The UI executes **no arbitrary shell** — every action reuses the same governed
+primitives as the CLI (locks, policy, board, inbox, journal) and is journaled. It
+refreshes by polling and opens no outbound connections.
+
+## Managed updates (`coact update`)
+
+`coact update` / `switch` / `versions` are **experimental** and manage
+side-by-side binaries under `~/.coact` — the only place CoAct writes outside the
+repository.
+
+- Releases are fetched from the pinned GitHub repository over **HTTPS** and
+  verified against a **SHA-256** checksum before install.
+- Archive extraction is **not** controlled by the archive's own paths: it matches
+  the binary by base name (`coact`/`coact.exe`) and writes to a fixed
+  `~/.coact/bin/coact-<version>` path, so a hostile archive cannot escape via
+  `../` entries ("zip-slip").
+- It **never overwrites a system install** — it only re-points the managed
+  `~/.coact/coact` shim, and only when the running binary is itself managed.
+- Checksums verify **integrity, not authenticity**: there is not yet a
+  cryptographic signature, so `coact update` trusts GitHub + TLS. Treat it as a
+  convenience until release signing lands; prefer your package manager or a
+  verified download for high-assurance installs.
+
 ## Design safeguards
 
 - **No shell execution.** CoAct never invokes `sh -c`/`bash -c`; subprocesses
   (`git`, the agent binary) use `exec.Command` with fixed or pass-through args —
   no command-injection surface.
-- **No network.** The binary makes no network calls.
+- **No network in the coordination core.** The core makes no network calls; the
+  sole exception is the opt-in `coact update` above, which is never invoked
+  automatically.
 - **Path containment.** Lockable paths are normalized and rejected if they
   escape the repo root; lock files are content-hashed, not path-named; agent
   identifiers are restricted to `[a-z0-9_-]` so they cannot traverse out of

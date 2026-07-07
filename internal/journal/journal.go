@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -44,4 +46,47 @@ func Append(journalDir, agent, event string, fields map[string]string) error {
 	defer f.Close()
 	_, err = f.Write(line)
 	return err
+}
+
+// ReadRecent returns the most recent n journal records in chronological order.
+func ReadRecent(journalDir string, n int) ([]map[string]string, error) {
+	entries, err := os.ReadDir(journalDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var files []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".jsonl") {
+			files = append(files, filepath.Join(journalDir, e.Name()))
+		}
+	}
+	sort.Strings(files)
+
+	var lines []string
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		for _, ln := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
+			if strings.TrimSpace(ln) != "" {
+				lines = append(lines, ln)
+			}
+		}
+	}
+	if n > 0 && len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+
+	records := make([]map[string]string, 0, len(lines))
+	for _, ln := range lines {
+		var rec map[string]string
+		if json.Unmarshal([]byte(ln), &rec) == nil {
+			records = append(records, rec)
+		}
+	}
+	return records, nil
 }

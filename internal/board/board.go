@@ -3,7 +3,7 @@
 // The board is human-first Markdown; each task is a list item with a trailing
 // HTML-comment metadata tag, e.g.
 //
-//	- [~] Refactor auth <!-- coact: id=T-011 state=doing owner=claude ttl=1800 -->
+//   - [~] Refactor auth <!-- coact: id=T-011 state=doing owner=claude ttl=1800 -->
 //
 // The checkbox glyph mirrors state for humans; the comment is the source of
 // truth for machines.

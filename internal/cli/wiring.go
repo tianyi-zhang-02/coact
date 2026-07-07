@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/tianyi-zhang-02/coact/internal/platform"
+	"github.com/tianyi-zhang-02/coact/internal/setup"
 )
 
 const (
@@ -15,31 +16,10 @@ const (
 	coactEnd   = "<!-- coact:end -->"
 )
 
-// ensureMarkedBlock idempotently appends body (wrapped in coact markers) to the
-// file at path, creating it if needed. Returns true if it changed the file.
-func ensureMarkedBlock(path, body string) (bool, error) {
-	var content string
-	if data, err := os.ReadFile(path); err == nil {
-		content = string(data)
-	} else if !os.IsNotExist(err) {
-		return false, err
-	}
-	if strings.Contains(content, coactBegin) {
-		return false, nil // already present
-	}
-	var b strings.Builder
-	b.WriteString(content)
-	if content != "" {
-		if !strings.HasSuffix(content, "\n") {
-			b.WriteString("\n")
-		}
-		b.WriteString("\n")
-	}
-	b.WriteString(coactBegin + "\n")
-	b.WriteString(strings.TrimRight(body, "\n") + "\n")
-	b.WriteString(coactEnd + "\n")
-	return true, platform.AtomicWrite(path, []byte(b.String()), 0o644)
-}
+// This file holds coact's removal + inspection helpers for wiring (used by
+// deinit and doctor). The idempotent init-time wiring (ensureClaudeHook,
+// ensureMarkedBlock) lives in internal/setup, which the CLI and the UI both call
+// — keeping the safety-critical hook format in exactly one place.
 
 // removeMarkedBlock removes the coact-marked block from path. Returns true if it
 // changed the file.
@@ -73,85 +53,12 @@ func removeMarkedBlock(path string) (bool, error) {
 	return true, platform.AtomicWrite(path, []byte(result), 0o644)
 }
 
-// ensureClaudeHook idempotently wires coact's PreToolUse gate into the repo's
-// .claude/settings.json, merging with any existing settings. Returns true if it
-// added the hook.
+func ensureMarkedBlock(path, body string) (bool, error) {
+	return setup.EnsureMarkedBlock(path, body)
+}
+
 func ensureClaudeHook(root string) (bool, error) {
-	claudeDir := filepath.Join(root, ".claude")
-	if err := os.MkdirAll(claudeDir, 0o755); err != nil {
-		return false, err
-	}
-	settingsPath := filepath.Join(claudeDir, "settings.json")
-
-	settings := map[string]any{}
-	if data, err := os.ReadFile(settingsPath); err == nil && len(strings.TrimSpace(string(data))) > 0 {
-		if err := json.Unmarshal(data, &settings); err != nil {
-			return false, fmt.Errorf(".claude/settings.json is not valid JSON: %w", err)
-		}
-	}
-
-	hooks, _ := settings["hooks"].(map[string]any)
-	if hooks == nil {
-		hooks = map[string]any{}
-	}
-	pre, _ := hooks["PreToolUse"].([]any)
-
-	// The command MUST be a single shell string ("<coact> hook claude"). The
-	// args-array exec form is ignored by older Claude Code (1.0.x runs the bare
-	// binary → prints usage → exit 1 → non-blocking, so edits are NOT gated).
-	desired := coactBinary() + " hook claude"
-
-	present := false
-	dirty := false
-	var kept []any
-	for _, entry := range pre {
-		em, _ := entry.(map[string]any)
-		hs, _ := em["hooks"].([]any)
-		var keptHooks []any
-		for _, h := range hs {
-			hm, ok := h.(map[string]any)
-			if ok && isCoactHook(hm) {
-				c, _ := hm["command"].(string)
-				_, hasArgs := hm["args"]
-				if c == desired && !hasArgs && !present {
-					present = true
-					keptHooks = append(keptHooks, h)
-				} else {
-					dirty = true // outdated / duplicate coact hook → drop & migrate
-				}
-				continue
-			}
-			keptHooks = append(keptHooks, h)
-		}
-		if len(keptHooks) > 0 {
-			em["hooks"] = keptHooks
-			kept = append(kept, em)
-		} else {
-			dirty = true // matcher entry held only coact hooks; drop it
-		}
-	}
-
-	if present && !dirty {
-		return false, nil
-	}
-	if !present {
-		kept = append(kept, map[string]any{
-			"matcher": "Edit|Write|MultiEdit|NotebookEdit",
-			"hooks":   []any{map[string]any{"type": "command", "command": desired}},
-		})
-	}
-	hooks["PreToolUse"] = kept
-	settings["hooks"] = hooks
-
-	data, err := json.MarshalIndent(settings, "", "  ")
-	if err != nil {
-		return false, err
-	}
-	data = append(data, '\n')
-	if err := platform.AtomicWrite(settingsPath, data, 0o644); err != nil {
-		return false, err
-	}
-	return true, nil
+	return setup.EnsureClaudeHook(root)
 }
 
 // removeClaudeHook removes coact's PreToolUse hook from .claude/settings.json,

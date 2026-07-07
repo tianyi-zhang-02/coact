@@ -11,11 +11,20 @@ import (
 // Run dispatches a subcommand and returns a process exit code.
 func Run(args []string) int {
 	if len(args) == 0 {
+		// Bare `coact` opens the control center only in an interactive terminal.
+		// In a pipe, script, or CI, stdout is not a TTY, so it prints usage and
+		// exits instead of hanging on a blocking server. `coact ui` always
+		// launches regardless of TTY.
+		if isInteractive() {
+			return cmdUI(nil)
+		}
 		printUsage()
 		return 1
 	}
 	cmd, rest := args[0], args[1:]
 	switch cmd {
+	case "ui":
+		return cmdUI(rest)
 	case "init":
 		return cmdInit(rest)
 	case "deinit":
@@ -68,6 +77,12 @@ func Run(args []string) int {
 		return cmdHook(rest)
 	case "version", "--version", "-v":
 		return cmdVersion()
+	case "versions":
+		return cmdVersions(rest)
+	case "update":
+		return cmdUpdate(rest)
+	case "switch":
+		return cmdSwitch(rest)
 	case "help", "--help", "-h":
 		printUsage()
 		return 0
@@ -76,6 +91,14 @@ func Run(args []string) int {
 		printUsage()
 		return 1
 	}
+}
+
+func isInteractive() bool {
+	st, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return st.Mode()&os.ModeCharDevice != 0
 }
 
 // parseInterspersed parses flags that may appear before or after positional
@@ -128,9 +151,10 @@ func printUsage() {
 	fmt.Print(`coact — govern two coding agents in one repository.
 
 Usage:
-  coact <command> [flags]
+  coact [command] [flags]
 
 Commands:
+  ui               Open the local CoAct control center (--addr, --port, --no-open, --lang)
   init             Scaffold .coact/ and wire the agents in this repository
   doctor           Check the setup and self-test enforcement (no agent needed)
   deinit           Remove coact's wiring (--purge also deletes .coact/)
@@ -156,6 +180,9 @@ Commands:
   log              Show recent journal events (oversight view)
   policy           Show or check write policy (check <path> | show)
   hook claude      PreToolUse gate for Claude Code (wired by init)
+  versions         List locally managed coact versions (experimental)
+  update           Download a release into ~/.coact (experimental; checksum-verified, unsigned)
+  switch <version> Switch the ~/.coact/coact shim to a managed version (experimental)
   version          Print version
   help             Show this help
 
@@ -163,12 +190,15 @@ Common flags:
   --agent <id>     Participant id (default: $COACT_AGENT, else "human")
 
 Examples:
+  coact                  # open the local UI
+  coact ui --no-open --port 7331
   coact init
   export COACT_AGENT=claude
   coact sidecar &          # keep this session live
   coact task add "Add rate limiting"
   coact claim T-001
   coact lock src/api
+  coact update --channel stable
   coact status
 `)
 }

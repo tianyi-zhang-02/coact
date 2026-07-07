@@ -48,8 +48,20 @@ so it never bypasses the governance core.
 Install CoAct (see below), then in your repository:
 
 ```sh
+coact             # opens the local control center at 127.0.0.1
+```
+
+The UI gives you the normal path: initialize the repo, write a project brief,
+create/claim/finish tasks, send agent messages, watch live agents/locks/logs,
+and copy the exact launch commands. It is local-only, uses polling, and does not
+execute arbitrary shell commands.
+
+If you prefer the terminal workflow, the existing CLI remains available:
+
+```sh
 coact init        # wires the Claude Code hook + writes the agent contracts
 coact doctor      # verify: checks the wiring and self-tests enforcement
+coact help        # show all CLI commands
 ```
 
 `coact doctor` confirms CoAct works on your machine **without needing a second
@@ -146,6 +158,8 @@ needs codex installed and Claude Code ≥ 2.1.80. Full guide:
 
 | Command | Purpose |
 |---|---|
+| `coact` | Open the local web control center |
+| `coact ui [--no-open]` | Start the local UI explicitly |
 | `coact init` | Wire the hook + contracts in this repo |
 | `coact doctor` | Check setup and self-test enforcement (no agent needed) |
 | `coact deinit` | Remove CoAct's wiring (`--purge` also removes `.coact/`) |
@@ -163,6 +177,7 @@ needs codex installed and Claude Code ≥ 2.1.80. Full guide:
 | `coact lock <path>` / `unlock <path>` | Advisory write-intent lock (`unlock --all` frees all yours) |
 | `coact policy check <path>` / `show` | Test or view the write policy |
 | `coact sidecar` | Per-session presence heartbeat |
+| `coact versions` / `update` / `switch <version>` | Manage binaries under `~/.coact` |
 
 Locks are stolen only from a participant that is both past its TTL **and** not
 live per presence, so a long build or a long reasoning turn never loses its lock.
@@ -196,11 +211,11 @@ detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 Works today: two-agent coordination (Claude Code + Codex), advisory locks with
 Claude Code hook enforcement, a capability policy (protected paths + per-agent
-write scopes), the task board, presence, the journal, opt-in git-worktree
-isolation with merge gates, and turn-based agent-to-agent messaging + task
-hand-off — as a single cross-platform binary. On the roadmap: real-time
-(mid-turn) messaging and automatic quota-triggered hand-off, and more agent
-adapters. See
+write scopes), the local control center, the task board, presence, the journal,
+opt-in git-worktree isolation with merge gates, turn-based agent-to-agent
+messaging + task hand-off, and managed local versions under `~/.coact` — as a
+single cross-platform binary. On the roadmap: deeper real-time (mid-turn)
+messaging, automatic quota-triggered hand-off, and more agent adapters. See
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ROADMAP.md](docs/ROADMAP.md),
 [docs/SPEC.md](docs/SPEC.md), and [docs/STACK.md](docs/STACK.md).
 
@@ -215,6 +230,15 @@ go install github.com/tianyi-zhang-02/coact/cmd/coact@latest
 # or build locally
 git clone https://github.com/tianyi-zhang-02/coact && cd coact
 go build -o coact ./cmd/coact
+```
+
+Managed updates install side-by-side into `~/.coact/bin` and switch only the
+`~/.coact/coact` shim:
+
+```sh
+coact update --channel stable
+coact versions
+coact switch v0.1.0
 ```
 
 Release binaries and a one-line install script land with the first tagged
@@ -248,9 +272,13 @@ OS-specific pieces (process-liveness checks) are isolated behind build tags in
 ## Security
 
 CoAct wires a hook that runs on every edit, so it takes its own safety
-seriously: no shell execution, no network, writes bounded to the repo, agent ids
-sanitized, the hook **fails open**, and everything removable with `coact deinit`.
-See [SECURITY.md](SECURITY.md) for the full model.
+seriously: no shell execution, writes bounded to the repo, agent ids sanitized,
+the hook **fails open**, and everything removable with `coact deinit`. The local
+control center binds to `127.0.0.1` **and** enforces a Host-header allowlist plus
+a per-run CSRF token, so a stray browser page can't drive it. The experimental
+`coact update` is the only opt-in networked feature: it fetches releases over
+HTTPS, verifies SHA-256 checksums, and only manages files under `~/.coact`. See
+[SECURITY.md](SECURITY.md) for the full model.
 
 ## License
 
