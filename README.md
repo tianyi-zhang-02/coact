@@ -137,8 +137,10 @@ coordinate through the shared inbox — no daemon:
   relaying Codex's streamed output into Claude's channel and Claude's replies
   into Codex mid-turn.
 
-The logic is tested against fakes; end-to-end needs codex installed and a recent
-Claude Code on your machine.
+Set it up in one step with `coact channel install` (registers the `.mcp.json`
+entry and prints the commands). The logic is tested against fakes; end-to-end
+needs codex installed and Claude Code ≥ 2.1.80. Full guide:
+[docs/REALTIME.md](docs/REALTIME.md).
 
 ## Commands
 

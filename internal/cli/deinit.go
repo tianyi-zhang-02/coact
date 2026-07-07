@@ -31,6 +31,11 @@ func cmdDeinit(args []string) int {
 	} else if changed {
 		removed = append(removed, ".claude/settings.json (PreToolUse hook)")
 	}
+	if changed, err := removeChannelMCP(p.Root); err != nil {
+		fmt.Fprintf(os.Stderr, "coact: %v\n", err)
+	} else if changed {
+		removed = append(removed, ".mcp.json (coact channel)")
+	}
 	for _, ad := range adapter.All() {
 		if changed, err := removeMarkedBlock(filepath.Join(p.Root, ad.ContractFile)); err != nil {
 			fmt.Fprintf(os.Stderr, "coact: %v\n", err)

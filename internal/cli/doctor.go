@@ -80,6 +80,18 @@ func cmdDoctor(args []string) int {
 		bad("enforcement self-test FAILED — " + detail)
 	}
 
+	// Real-time bridge readiness (optional; not required for coordination).
+	if channelMCPInstalled(p.Root, "claude") {
+		ok("real-time channel registered in .mcp.json (needs Claude Code >= 2.1.80)")
+	} else {
+		warn("real-time channel not installed (optional) — run `coact channel install`")
+	}
+	if _, err := exec.LookPath("codex"); err == nil {
+		ok("codex on PATH (for `coact bridge codex`)")
+	} else {
+		warn("codex not on PATH — `coact bridge codex` needs it for real-time")
+	}
+
 	fmt.Println()
 	if healthy {
 		fmt.Println("coact is set up correctly.")

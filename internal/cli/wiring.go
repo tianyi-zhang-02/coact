@@ -258,3 +258,95 @@ func coactBinary() string {
 	}
 	return "coact"
 }
+
+func channelServerName(agent string) string { return "coact-" + agent }
+
+// channelMCPInstalled reports whether the coact channel for agent is registered
+// in the repo's .mcp.json.
+func channelMCPInstalled(root, agent string) bool {
+	data, err := os.ReadFile(filepath.Join(root, ".mcp.json"))
+	if err != nil {
+		return false
+	}
+	var m map[string]any
+	if json.Unmarshal(data, &m) != nil {
+		return false
+	}
+	servers, _ := m["mcpServers"].(map[string]any)
+	_, ok := servers[channelServerName(agent)]
+	return ok
+}
+
+// ensureChannelMCP registers the coact channel for agent in .mcp.json (merging
+// with any existing servers). Returns true if it added the entry.
+func ensureChannelMCP(root, agent string) (bool, error) {
+	path := filepath.Join(root, ".mcp.json")
+	settings := map[string]any{}
+	if data, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(data))) > 0 {
+		if err := json.Unmarshal(data, &settings); err != nil {
+			return false, fmt.Errorf(".mcp.json is not valid JSON: %w", err)
+		}
+	}
+	servers, _ := settings["mcpServers"].(map[string]any)
+	if servers == nil {
+		servers = map[string]any{}
+	}
+	name := channelServerName(agent)
+	if _, exists := servers[name]; exists {
+		return false, nil
+	}
+	servers[name] = map[string]any{
+		"command": coactBinary(),
+		"args":    []any{"channel", agent},
+	}
+	settings["mcpServers"] = servers
+
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return false, err
+	}
+	data = append(data, '\n')
+	if err := platform.AtomicWrite(path, data, 0o644); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// removeChannelMCP removes coact channel entries from .mcp.json, pruning the
+// map when empty. Returns true if it changed the file.
+func removeChannelMCP(root string) (bool, error) {
+	path := filepath.Join(root, ".mcp.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	var settings map[string]any
+	if json.Unmarshal(data, &settings) != nil {
+		return false, nil
+	}
+	servers, _ := settings["mcpServers"].(map[string]any)
+	changed := false
+	for name := range servers {
+		if strings.HasPrefix(name, "coact-") {
+			delete(servers, name)
+			changed = true
+		}
+	}
+	if !changed {
+		return false, nil
+	}
+	if len(servers) == 0 {
+		delete(settings, "mcpServers")
+	} else {
+		settings["mcpServers"] = servers
+	}
+	out, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return false, err
+	}
+	out = append(out, '\n')
+	return true, platform.AtomicWrite(path, out, 0o644)
+}
