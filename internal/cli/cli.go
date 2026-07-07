@@ -42,6 +42,8 @@ func Run(args []string) int {
 		return cmdHandoff(rest)
 	case "channel":
 		return cmdChannel(rest)
+	case "bridge":
+		return cmdBridge(rest)
 	case "status":
 		return cmdStatus(rest)
 	case "lock":
@@ -148,6 +150,7 @@ Commands:
   inbox            Read your messages from other agents
   handoff <to>     Hand your tasks + context to another agent
   channel <agent>  Run the Claude Code channel MCP server (real-time push)
+  bridge codex     Drive Codex's app-server, relaying live to/from Claude
   task add "<t>"   Add a task to the board
   sidecar          Run the presence heartbeat for this session
   log              Show recent journal events (oversight view)
