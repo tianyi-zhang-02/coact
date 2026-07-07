@@ -7,12 +7,12 @@
 # Go
 /vendor/
 
-# coact runtime state — coordination intent (config.json, board.md) is committed,
-# but per-run state is not.
-.coact/locks/
-.coact/session/
-.coact/journal/
-.coact/inbox/
+# This repo is coact's source, not a project that uses coact. Ignore any
+# artifacts from dogfooding `coact init` in the repo root.
+/.coact/
+/CLAUDE.md
+/AGENTS.md
+/.claude/
 
 # Editor / OS
 .DS_Store
