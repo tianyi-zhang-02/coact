@@ -45,7 +45,11 @@ func cmdDoctor(args []string) int {
 
 	if cmd, cargs, found := wiredHookCommand(p.Root); found {
 		ok("Claude hook wired: " + strings.TrimSpace(cmd+" "+strings.Join(cargs, " ")))
-		if _, err := os.Stat(cmd); err != nil {
+		bin := cmd
+		if fields := strings.Fields(cmd); len(fields) > 0 {
+			bin = fields[0] // command is "<binary> hook claude"
+		}
+		if _, err := os.Stat(bin); err != nil {
 			bad("the wired hook binary is missing at that path — re-run `coact init`")
 		}
 	} else {

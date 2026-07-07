@@ -96,27 +96,51 @@ func ensureClaudeHook(root string) (bool, error) {
 	}
 	pre, _ := hooks["PreToolUse"].([]any)
 
+	// The command MUST be a single shell string ("<coact> hook claude"). The
+	// args-array exec form is ignored by older Claude Code (1.0.x runs the bare
+	// binary → prints usage → exit 1 → non-blocking, so edits are NOT gated).
+	desired := coactBinary() + " hook claude"
+
+	present := false
+	dirty := false
+	var kept []any
 	for _, entry := range pre {
 		em, _ := entry.(map[string]any)
 		hs, _ := em["hooks"].([]any)
+		var keptHooks []any
 		for _, h := range hs {
-			if hm, ok := h.(map[string]any); ok && isCoactHook(hm) {
-				return false, nil
+			hm, ok := h.(map[string]any)
+			if ok && isCoactHook(hm) {
+				c, _ := hm["command"].(string)
+				_, hasArgs := hm["args"]
+				if c == desired && !hasArgs && !present {
+					present = true
+					keptHooks = append(keptHooks, h)
+				} else {
+					dirty = true // outdated / duplicate coact hook → drop & migrate
+				}
+				continue
 			}
+			keptHooks = append(keptHooks, h)
+		}
+		if len(keptHooks) > 0 {
+			em["hooks"] = keptHooks
+			kept = append(kept, em)
+		} else {
+			dirty = true // matcher entry held only coact hooks; drop it
 		}
 	}
 
-	entry := map[string]any{
-		"matcher": "Edit|Write|MultiEdit|NotebookEdit",
-		"hooks": []any{
-			map[string]any{
-				"type":    "command",
-				"command": coactBinary(),
-				"args":    []any{"hook", "claude"},
-			},
-		},
+	if present && !dirty {
+		return false, nil
 	}
-	hooks["PreToolUse"] = append(pre, entry)
+	if !present {
+		kept = append(kept, map[string]any{
+			"matcher": "Edit|Write|MultiEdit|NotebookEdit",
+			"hooks":   []any{map[string]any{"type": "command", "command": desired}},
+		})
+	}
+	hooks["PreToolUse"] = kept
 	settings["hooks"] = hooks
 
 	data, err := json.MarshalIndent(settings, "", "  ")
@@ -227,7 +251,9 @@ func wiredHookCommand(root string) (cmd string, args []string, found bool) {
 }
 
 func isCoactHook(hm map[string]any) bool {
-	if c, _ := hm["command"].(string); strings.Contains(c, "coact") && strings.Contains(c, "hook") {
+	// String form: "<coact> hook claude" — match the subcommand signature
+	// (path-independent; "hook claude" won't collide with e.g. "claude-hook.sh").
+	if c, _ := hm["command"].(string); strings.Contains(c, "hook claude") {
 		return true
 	}
 	if args, ok := hm["args"].([]any); ok {
