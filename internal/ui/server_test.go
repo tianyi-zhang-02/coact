@@ -8,8 +8,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/tianyi-zhang-02/coact/internal/versionmgr"
 )
 
 func TestStateAndInitAPI(t *testing.T) {
@@ -113,6 +116,76 @@ func TestLaunchCommandsAPI(t *testing.T) {
 	if !strings.Contains(string(body), `"agent":"claude"`) || !strings.Contains(string(body), `"agent":"codex"`) {
 		t.Fatalf("launch commands missing expected agents: %s", body)
 	}
+	if !strings.Contains(string(body), `"installed"`) || !strings.Contains(string(body), `"terminal_supported"`) {
+		t.Fatalf("launch commands missing status fields: %s", body)
+	}
+}
+
+func TestAgentLaunchAPIUsesInjectedLauncher(t *testing.T) {
+	dir := chdirTemp(t)
+	writeFakeBinary(t, dir, "claude")
+	oldPath := os.Getenv("PATH")
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+oldPath)
+
+	var gotAgent, gotExe, gotRoot string
+	ts := newTestServerWithLauncher(t, func(agent, exe, root string) error {
+		gotAgent, gotExe, gotRoot = agent, exe, root
+		return nil
+	})
+	defer ts.Close()
+	postJSON(t, ts, "/api/init", nil, http.StatusOK, nil)
+
+	postJSON(t, ts, "/api/agents/claude/launch", nil, http.StatusOK, nil)
+	if gotAgent != "claude" {
+		t.Fatalf("launcher agent = %q, want claude", gotAgent)
+	}
+	if gotExe == "" {
+		t.Fatal("launcher should receive coact executable path")
+	}
+	if gotRoot != dir {
+		t.Fatalf("launcher root = %q, want %q", gotRoot, dir)
+	}
+	state := getState(t, ts)
+	if !hasJournalEvent(state.Log, "agent.launch") {
+		t.Fatalf("journal did not include agent.launch: %#v", state.Log)
+	}
+}
+
+func TestAgentLaunchRejectsUnknownAdapter(t *testing.T) {
+	chdirTemp(t)
+	ts := newTestServer(t)
+	defer ts.Close()
+	postJSON(t, ts, "/api/init", nil, http.StatusOK, nil)
+
+	postJSON(t, ts, "/api/agents/not-real/launch", nil, http.StatusBadRequest, nil)
+}
+
+func TestVersionSwitchAPIUsesManagedHome(t *testing.T) {
+	chdirTemp(t)
+	home := t.TempDir()
+	writeManagedVersion(t, home, "v0.1.0")
+	writeManagedVersion(t, home, "v0.2.0")
+	ts := newTestServerWithLauncherAndHome(t, nil, home)
+	defer ts.Close()
+	postJSON(t, ts, "/api/init", nil, http.StatusOK, nil)
+
+	postJSON(t, ts, "/api/versions/v0.2.0/switch", nil, http.StatusOK, nil)
+	state := getState(t, ts)
+	if !hasLocalVersion(state.Versions, "v0.2.0", true) {
+		t.Fatalf("v0.2.0 should be active after switch: %#v", state.Versions)
+	}
+	if !hasJournalEvent(state.Log, "version.switch") {
+		t.Fatalf("journal did not include version.switch: %#v", state.Log)
+	}
+}
+
+func TestVersionSwitchRejectsTraversal(t *testing.T) {
+	chdirTemp(t)
+	ts := newTestServer(t)
+	defer ts.Close()
+	postJSON(t, ts, "/api/init", nil, http.StatusOK, nil)
+
+	postJSON(t, ts, "/api/versions/../switch", nil, http.StatusNotFound, nil)
 }
 
 func TestGuardRejectsForeignHost(t *testing.T) {
@@ -167,7 +240,17 @@ const testToken = "test-token"
 
 func newTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	srv := &Server{token: testToken}
+	return newTestServerWithLauncher(t, nil)
+}
+
+func newTestServerWithLauncher(t *testing.T, launcher func(agent, exe, root string) error) *httptest.Server {
+	t.Helper()
+	return newTestServerWithLauncherAndHome(t, launcher, "")
+}
+
+func newTestServerWithLauncherAndHome(t *testing.T, launcher func(agent, exe, root string) error, versionHome string) *httptest.Server {
+	t.Helper()
+	srv := &Server{token: testToken, launchAgent: launcher, versionHome: versionHome}
 	mux := http.NewServeMux()
 	srv.routes(mux)
 	// Route through guard so tests exercise the real Host + token defenses.
@@ -260,4 +343,37 @@ func hasJournalEvent(records []map[string]string, event string) bool {
 		}
 	}
 	return false
+}
+
+func hasLocalVersion(versions []versionmgr.LocalInfo, version string, active bool) bool {
+	for _, local := range versions {
+		if local.Version == version && local.Active == active {
+			return true
+		}
+	}
+	return false
+}
+
+func writeFakeBinary(t *testing.T, dir, name string) {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	data := []byte("#!/bin/sh\nexit 0\n")
+	if runtime.GOOS == "windows" {
+		path += ".bat"
+		data = []byte("@echo off\r\nexit /b 0\r\n")
+	}
+	if err := os.WriteFile(path, data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeManagedVersion(t *testing.T, home, version string) {
+	t.Helper()
+	if err := os.MkdirAll(versionmgr.BinDir(home), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(versionmgr.BinDir(home), versionmgr.BinaryName(version))
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 }

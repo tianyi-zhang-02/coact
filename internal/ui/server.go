@@ -84,8 +84,10 @@ func Serve(opts Options) error {
 // Server serves HTTP API handlers. It is stateless apart from the per-run CSRF
 // token minted at startup.
 type Server struct {
-	lang  string
-	token string
+	lang        string
+	token       string
+	launchAgent func(agent, exe, root string) error
+	versionHome string
 }
 
 // guard enforces the two protections that make a browser-reachable control
@@ -148,10 +150,12 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/state", s.handleState)
 	mux.HandleFunc("/api/init", s.handleInit)
 	mux.HandleFunc("/api/brief", s.handleBrief)
+	mux.HandleFunc("/api/agents/", s.handleAgentAction)
 	mux.HandleFunc("/api/tasks", s.handleTasks)
 	mux.HandleFunc("/api/tasks/", s.handleTaskAction)
 	mux.HandleFunc("/api/messages", s.handleMessages)
 	mux.HandleFunc("/api/launch-commands", s.handleLaunchCommands)
+	mux.HandleFunc("/api/versions/", s.handleVersionAction)
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -227,7 +231,7 @@ func (s *Server) state() (*stateResponse, error) {
 		Initialized: initialized,
 		Version:     buildinfo.Version,
 		Commit:      buildinfo.Commit,
-		Versions:    versionmgr.LocalVersions(versionmgr.DefaultHome()),
+		Versions:    versionmgr.LocalVersions(s.managedHome()),
 		Manifest:    versionmgr.BundledManifest(),
 	}
 	if st.Manifest != nil && st.Manifest.Version == "dev" {
@@ -481,6 +485,54 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
+func (s *Server) handleAgentAction(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	agent, action, ok := parseAgentAction(r.URL.Path)
+	if !ok || action != "launch" {
+		http.NotFound(w, r)
+		return
+	}
+	ad, ok := adapter.Get(agent)
+	if !ok {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("unknown adapter %q", agent))
+		return
+	}
+	p, err := requireProject()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if _, err := exec.LookPath(ad.Binary); err != nil {
+		writeError(w, http.StatusBadRequest, fmt.Errorf("%q is not installed or not on PATH", ad.Binary))
+		return
+	}
+	exe := "coact"
+	if e, err := os.Executable(); err == nil {
+		exe = e
+	}
+	launcher := s.launchAgent
+	if launcher == nil {
+		launcher = launchAgentTerminal
+	}
+	if err := launcher(agent, exe, p.Root); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	_ = journal.Append(p.JournalDir(), "human", "agent.launch", map[string]string{"agent": agent, "via": "ui"})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "agent": agent})
+}
+
+type launchCommandDTO struct {
+	Agent             string `json:"agent"`
+	Command           string `json:"command"`
+	Installed         bool   `json:"installed"`
+	BinaryPath        string `json:"binary_path,omitempty"`
+	TerminalSupported bool   `json:"terminal_supported"`
+}
+
 func (s *Server) handleLaunchCommands(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w)
@@ -490,14 +542,45 @@ func (s *Server) handleLaunchCommands(w http.ResponseWriter, r *http.Request) {
 	if e, err := os.Executable(); err == nil {
 		exe = e
 	}
-	var commands []map[string]string
+	var commands []launchCommandDTO
 	for _, ad := range adapter.All() {
-		commands = append(commands, map[string]string{
-			"agent":   ad.ID,
-			"command": exe + " " + ad.ID,
+		binPath, err := exec.LookPath(ad.Binary)
+		commands = append(commands, launchCommandDTO{
+			Agent:             ad.ID,
+			Command:           exe + " " + ad.ID,
+			Installed:         err == nil,
+			BinaryPath:        binPath,
+			TerminalSupported: terminalLaunchSupported(),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"commands": commands})
+}
+
+func (s *Server) handleVersionAction(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	version, action, ok := parseVersionAction(r.URL.Path)
+	if !ok || action != "switch" {
+		http.NotFound(w, r)
+		return
+	}
+	if err := versionmgr.Switch(s.managedHome(), version); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	if p, err := requireProject(); err == nil {
+		_ = journal.Append(p.JournalDir(), "human", "version.switch", map[string]string{"version": version, "via": "ui"})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "version": version})
+}
+
+func (s *Server) managedHome() string {
+	if s.versionHome != "" {
+		return s.versionHome
+	}
+	return versionmgr.DefaultHome()
 }
 
 func requireProject() (*project.Project, error) {
@@ -524,6 +607,28 @@ func parseTaskAction(path string) (id, action string, ok bool) {
 		return "", "", false
 	}
 	return parts[0], parts[1], true
+}
+
+func parseAgentAction(path string) (agent, action string, ok bool) {
+	rest := strings.TrimPrefix(path, "/api/agents/")
+	parts := strings.Split(strings.Trim(rest, "/"), "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", false
+	}
+	return sanitizeAgent(parts[0]), parts[1], true
+}
+
+func parseVersionAction(path string) (version, action string, ok bool) {
+	rest := strings.TrimPrefix(path, "/api/versions/")
+	parts := strings.Split(strings.Trim(rest, "/"), "/")
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || parts[1] == "" {
+		return "", "", false
+	}
+	version = strings.TrimSpace(parts[0])
+	if strings.ContainsAny(version, `/\`) || strings.Contains(version, "..") {
+		return "", "", false
+	}
+	return version, parts[1], true
 }
 
 func sanitizeAgent(id string) string {
@@ -578,4 +683,29 @@ func openBrowser(url string) error {
 	default:
 		return exec.Command("xdg-open", url).Start()
 	}
+}
+
+func terminalLaunchSupported() bool {
+	return runtime.GOOS == "darwin"
+}
+
+func launchAgentTerminal(agent, exe, root string) error {
+	if !terminalLaunchSupported() {
+		return fmt.Errorf("one-click terminal launch is currently supported on macOS only; run %s manually", shellQuote(exe+" "+agent))
+	}
+	cmd := "cd " + shellQuote(root) + " && " + shellQuote(exe) + " " + shellQuote(agent)
+	script := `tell application "Terminal" to do script "` + appleScriptQuote(cmd) + `"`
+	return exec.Command("osascript", "-e", script).Start()
+}
+
+func shellQuote(s string) string {
+	if s == "" {
+		return "''"
+	}
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+func appleScriptQuote(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	return strings.ReplaceAll(s, `"`, `\"`)
 }
