@@ -22,7 +22,7 @@ This spec is the design target. What ships today:
 | §1 Directory layout | built | `internal/project` |
 | §2 Lock protocol (registry-serialized acquire, TTL, presence-gated steal) | built | `internal/lockmgr`, `internal/metalock` |
 | §3 Task board | built | `internal/board` |
-| §4 Messaging (inbox) | planned | `.coact/inbox/` reserved, not wired |
+| §4 Messaging (inbox) | built (turn-based) | `internal/inbox` + `coact msg`/`inbox`/`handoff` |
 | §5 Presence & heartbeat | built | `internal/presence` (+ sidecar and launcher) |
 | §6 Journal | built | `internal/journal` |
 | §7 Config | built | `internal/config` |

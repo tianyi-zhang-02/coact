@@ -179,6 +179,22 @@ func (b *Board) Finish(id, agent string) (*Task, error) {
 	})
 }
 
+// Reassign moves every non-done task owned by `from` to `to` (state claimed),
+// returning the reassigned ids. Used by hand-off.
+func (b *Board) Reassign(from, to string) []string {
+	var moved []string
+	for _, t := range b.parse() {
+		if t.Owner == from && t.State != "done" {
+			t.Owner = to
+			t.State = "claimed"
+			t.Extra["hb"] = nowRFC()
+			b.lines[t.line] = t.render()
+			moved = append(moved, t.ID)
+		}
+	}
+	return moved
+}
+
 // Add appends a new todo task and returns it.
 func (b *Board) Add(title string) *Task {
 	id := b.nextID()

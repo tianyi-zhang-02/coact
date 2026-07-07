@@ -109,6 +109,22 @@ coact merge claude codex    # integrate — stops and shows conflicts for you
 The board and journal stay shared across worktrees, edits can't collide (they're
 on separate branches), and you resolve any conflicts at merge time.
 
+### Messaging & hand-off
+
+The agents talk to each other directly — no human relay:
+
+```sh
+coact msg codex "review my auth diff when you're free"   # send
+coact inbox                                              # read your messages
+coact handoff codex "auth 80% done; finish token refresh" # reassign tasks + notify
+```
+
+Messages travel through the shared filesystem (governed and journaled). It is
+**turn-based** — an agent reads its inbox at the start of a turn — not
+AgentBridge's real-time mid-turn push. `coact handoff` reassigns your active
+board tasks to the other agent, releases your locks, and sends the context; it's
+the explicit "I'm stopping / hitting my plan limit, take over" move.
+
 ## Commands
 
 | Command | Purpose |
@@ -124,6 +140,8 @@ on separate branches), and you resolve any conflicts at merge time.
 | `coact board` | List tasks and owners |
 | `coact task add "<t>"` | Add a task to the board |
 | `coact claim <id>` / `done <id>` | Claim / complete a task |
+| `coact msg <to> <text>` / `coact inbox` | Message another agent (governed, journaled) |
+| `coact handoff <to>` | Hand your tasks + context to another agent |
 | `coact lock <path>` / `unlock <path>` | Advisory write-intent lock (`unlock --all` frees all yours) |
 | `coact policy check <path>` / `show` | Test or view the write policy |
 | `coact sidecar` | Per-session presence heartbeat |
@@ -160,9 +178,11 @@ detail in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 Works today: two-agent coordination (Claude Code + Codex), advisory locks with
 Claude Code hook enforcement, a capability policy (protected paths + per-agent
-write scopes), the task board, presence, the journal, and opt-in git-worktree
-isolation with merge gates — as a single cross-platform binary. On the roadmap:
-more agent adapters and the optional messaging plane. See
+write scopes), the task board, presence, the journal, opt-in git-worktree
+isolation with merge gates, and turn-based agent-to-agent messaging + task
+hand-off — as a single cross-platform binary. On the roadmap: real-time
+(mid-turn) messaging and automatic quota-triggered hand-off, and more agent
+adapters. See
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ROADMAP.md](docs/ROADMAP.md),
 [docs/SPEC.md](docs/SPEC.md), and [docs/STACK.md](docs/STACK.md).
 

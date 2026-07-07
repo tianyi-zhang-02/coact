@@ -30,6 +30,12 @@ Divide the work explicitly instead of overlapping:
   "coact done <id>" when finished.
 - Run "coact status" for live participants and locks, "coact log" for the audit trail.
 
+Talk to the other agent directly instead of asking the human to relay:
+- At the start of each turn, run "coact inbox" to read new messages.
+- Send a message with: coact msg codex "your message"
+- If you must stop or hit your plan's usage limit, hand off your work with:
+  coact handoff codex "what is left and any context"
+
 This session should have COACT_AGENT=claude set.
 `
 
@@ -51,6 +57,12 @@ Divide the work explicitly:
 - Run "coact board" to see tasks, "coact claim <id>" before starting, and
   "coact done <id>" after.
 - Run "coact status" for who holds what, and "coact log" for the audit trail.
+
+Talk to the other agent directly instead of asking the human to relay:
+- At the start of each turn, run "coact inbox" to read new messages.
+- Send a message with: coact msg claude "your message"
+- If you must stop or hit your plan's usage limit, hand off your work with:
+  coact handoff claude "what is left and any context"
 
 This session should have COACT_AGENT=codex set so the id is implicit.
 `

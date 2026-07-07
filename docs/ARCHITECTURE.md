@@ -86,6 +86,16 @@ flowchart LR
     BASE -.->|conflict → human resolves| BASE
 ```
 
+## Messaging & hand-off (turn-based)
+
+Agents communicate through `.coact/inbox/<agent>.md` — `coact msg` appends,
+`coact inbox` reads and consumes, serialized under a metalock and journaled.
+Delivery is **turn-based** (an agent reads its inbox at the start of a turn), not
+real-time push. `coact handoff` reassigns the sender's active board tasks to
+another agent, releases its locks, and messages the recipient with context — the
+explicit "I'm stopping / hitting my plan limit, take over" move. Real-time
+mid-turn push and automatic quota-triggered hand-off remain on the roadmap.
+
 ## Components
 
 | Package | Responsibility |
@@ -98,6 +108,7 @@ flowchart LR
 | `internal/board` | the shared task board (`claim` / `done` / `add`) |
 | `internal/presence` | per-session heartbeat; the liveness authority for lock stealing |
 | `internal/journal` | append-only JSONL audit log |
+| `internal/inbox` | turn-based agent-to-agent messages (`msg`/`inbox`/`handoff`) |
 | `internal/config` | `.coact/config.json` |
 | `internal/project` | locating `.coact/` and resolving its paths |
 | `internal/platform` | atomic writes + build-tagged process-liveness (macOS/Linux/Windows) |

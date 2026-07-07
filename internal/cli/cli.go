@@ -30,6 +30,12 @@ func Run(args []string) int {
 		return cmdWorktree(rest)
 	case "merge":
 		return cmdMerge(rest)
+	case "msg":
+		return cmdMsg(rest)
+	case "inbox":
+		return cmdInbox(rest)
+	case "handoff":
+		return cmdHandoff(rest)
 	case "status":
 		return cmdStatus(rest)
 	case "lock":
@@ -130,6 +136,9 @@ Commands:
   board            List tasks on the shared board
   claim <id>       Claim a task from the board
   done <id>        Mark a claimed task done
+  msg <to> <text>  Send a message to another agent
+  inbox            Read your messages from other agents
+  handoff <to>     Hand your tasks + context to another agent
   task add "<t>"   Add a task to the board
   sidecar          Run the presence heartbeat for this session
   log              Show recent journal events (oversight view)
