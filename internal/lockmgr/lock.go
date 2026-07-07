@@ -71,7 +71,7 @@ func New(p *project.Project, cfg *config.Config) *Manager {
 		ttl = 900
 	}
 	return &Manager{
-		root:        p.Root,
+		root:        p.WorkRoot(),
 		locksDir:    p.LocksDir(),
 		sessionDir:  p.SessionDir(),
 		journalDir:  p.JournalDir(),
@@ -85,13 +85,16 @@ func New(p *project.Project, cfg *config.Config) *Manager {
 func nowRFC() string { return time.Now().UTC().Format(time.RFC3339) }
 
 // rel normalizes a user-supplied path to a clean, slash-separated path relative
-// to the repo root, rejecting anything outside the root.
+// to the repo root, rejecting anything outside the root. Both sides are
+// canonicalized (symlinks resolved) so paths from different sources — e.g. the
+// git-resolved worktree root (/private/var/... on macOS) vs a caller path
+// (/var/...) — compare equal instead of falsely reading as "outside".
 func (m *Manager) rel(raw string) (string, error) {
 	abs, err := filepath.Abs(raw)
 	if err != nil {
 		return "", err
 	}
-	r, err := filepath.Rel(m.root, abs)
+	r, err := filepath.Rel(canonicalPath(m.root), canonicalPath(abs))
 	if err != nil {
 		return "", err
 	}
@@ -100,6 +103,29 @@ func (m *Manager) rel(raw string) (string, error) {
 		return "", fmt.Errorf("path %q is outside the repo root", raw)
 	}
 	return r, nil
+}
+
+// canonicalPath resolves symlinks on the longest existing prefix of p (the
+// leaf may not exist yet — locks are taken before an edit creates the file).
+func canonicalPath(p string) string {
+	if abs, err := filepath.Abs(p); err == nil {
+		p = abs
+	}
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return resolved
+	}
+	dir, tail := p, ""
+	for {
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return p // reached the root without resolving anything
+		}
+		tail = filepath.Join(filepath.Base(dir), tail)
+		dir = parent
+		if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(resolved, tail)
+		}
+	}
 }
 
 func hashPath(rel string) string {

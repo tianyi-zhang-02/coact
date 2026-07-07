@@ -41,7 +41,7 @@ func policyCheck(args []string) int {
 	if !ok {
 		return 1
 	}
-	rel, err := relToRoot(p.Root, positionals[0])
+	rel, err := relToRoot(p.WorkRoot(), positionals[0])
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "coact: %v\n", err)
 		return 1

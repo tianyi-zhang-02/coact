@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/tianyi-zhang-02/coact/internal/config"
+	"github.com/tianyi-zhang-02/coact/internal/lockmgr"
 	"github.com/tianyi-zhang-02/coact/internal/project"
 )
 
@@ -64,5 +65,15 @@ func TestWorktreeAddAndSharedResolution(t *testing.T) {
 	want, _ := filepath.EvalSymlinks(repo)
 	if got != want {
 		t.Fatalf("ResolveFrom(worktree).Root = %q, want main repo %q", got, want)
+	}
+
+	cfg, _ := config.Load(filepath.Join(repo, ".coact", "config.json"))
+	m := lockmgr.New(p, cfg)
+	res, err := m.Acquire("codex", filepath.Join(wt, "main.go"))
+	if err != nil {
+		t.Fatalf("Acquire from worktree path: %v", err)
+	}
+	if !res.Acquired || res.Path != "main.go" {
+		t.Fatalf("Acquire from worktree = %+v, want acquired main.go", res)
 	}
 }

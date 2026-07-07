@@ -15,7 +15,8 @@ var ErrNotInitialized = errors.New("coact: not initialized in this directory tre
 
 // Project is a workspace rooted at the directory containing .coact.
 type Project struct {
-	Root string
+	Root         string
+	CheckoutRoot string
 }
 
 func (p *Project) CoactDir() string    { return filepath.Join(p.Root, ".coact") }
@@ -26,6 +27,16 @@ func (p *Project) JournalDir() string  { return filepath.Join(p.CoactDir(), "jou
 func (p *Project) AdaptersDir() string { return filepath.Join(p.CoactDir(), "adapters") }
 func (p *Project) ConfigPath() string  { return filepath.Join(p.CoactDir(), "config.json") }
 func (p *Project) BoardPath() string   { return filepath.Join(p.CoactDir(), "board.md") }
+
+// WorkRoot is the checkout where user paths should be interpreted. For the main
+// worktree this is Root; for linked worktrees it is the linked checkout while
+// Root remains the main worktree that owns .coact/.
+func (p *Project) WorkRoot() string {
+	if p.CheckoutRoot != "" {
+		return p.CheckoutRoot
+	}
+	return p.Root
+}
 
 // Find locates the project by walking up from the current directory looking for
 // an existing .coact directory.
@@ -43,7 +54,7 @@ func FindFrom(start string) (*Project, error) {
 	for {
 		info, err := os.Stat(filepath.Join(dir, ".coact"))
 		if err == nil && info.IsDir() {
-			return &Project{Root: dir}, nil
+			return &Project{Root: dir, CheckoutRoot: dir}, nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -69,7 +80,11 @@ func Resolve() (*Project, error) {
 func ResolveFrom(start string) (*Project, error) {
 	if main := mainWorktreeRoot(start); main != "" {
 		if st, err := os.Stat(filepath.Join(main, ".coact")); err == nil && st.IsDir() {
-			return &Project{Root: main}, nil
+			checkout := gitTopLevel(start)
+			if checkout == "" {
+				checkout = start
+			}
+			return &Project{Root: main, CheckoutRoot: checkout}, nil
 		}
 	}
 	return FindFrom(start)
