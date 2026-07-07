@@ -140,7 +140,8 @@ Codex-side app-server bridge (so Codex also receives mid-turn) is next.
 | `coact init` | Wire the hook + contracts in this repo |
 | `coact doctor` | Check setup and self-test enforcement (no agent needed) |
 | `coact deinit` | Remove CoAct's wiring (`--purge` also removes `.coact/`) |
-| `coact claude` / `coact codex` | Launch an agent (add `--worktree` to isolate) |
+| `coact claude` / `coact codex` / `coact gemini` | Launch an agent (add `--worktree` to isolate) |
+| `coact adapters` | List the agents coact can coordinate |
 | `coact worktree add/list/rm` | Per-agent isolated git worktrees |
 | `coact merge <agent>` | Merge an agent's branch (stops on conflict) |
 | `coact status` | Live participants, current tasks, active locks |

@@ -53,6 +53,7 @@ func Default() *Config {
 		Agents: []AgentConfig{
 			{ID: "claude", Adapter: "claude-code"},
 			{ID: "codex", Adapter: "codex"},
+			{ID: "gemini", Adapter: "gemini-cli"},
 		},
 		Locks: LockConfig{
 			DefaultTTLSeconds:      900,

@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/tianyi-zhang-02/coact/internal/adapter"
 	"github.com/tianyi-zhang-02/coact/internal/config"
 	"github.com/tianyi-zhang-02/coact/internal/journal"
 	"github.com/tianyi-zhang-02/coact/internal/lockmgr"
@@ -15,8 +16,18 @@ import (
 	"github.com/tianyi-zhang-02/coact/internal/project"
 )
 
-func cmdClaude(args []string) int { return launchAgent("claude", "claude", args) }
-func cmdCodex(args []string) int  { return launchAgent("codex", "codex", args) }
+func cmdClaude(args []string) int { return launchAdapter("claude", args) }
+func cmdCodex(args []string) int  { return launchAdapter("codex", args) }
+func cmdGemini(args []string) int { return launchAdapter("gemini", args) }
+
+func launchAdapter(id string, args []string) int {
+	ad, ok := adapter.Get(id)
+	if !ok {
+		fmt.Fprintf(os.Stderr, "coact: no adapter %q (see `coact adapters`)\n", id)
+		return 2
+	}
+	return launchAgent(ad.ID, ad.Binary, args)
+}
 
 func launchAgent(agent, binary string, args []string) int {
 	useWorktree := false

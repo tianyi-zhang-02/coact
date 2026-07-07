@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/tianyi-zhang-02/coact/internal/adapter"
 	"github.com/tianyi-zhang-02/coact/internal/config"
 	"github.com/tianyi-zhang-02/coact/internal/lockmgr"
 	"github.com/tianyi-zhang-02/coact/internal/presence"
@@ -51,15 +52,17 @@ func cmdDoctor(args []string) int {
 		bad("Claude hook is not wired in .claude/settings.json — run `coact init`")
 	}
 
-	if hasCoactBlock(filepath.Join(p.Root, "CLAUDE.md")) {
-		ok("CLAUDE.md has the coact contract")
-	} else {
-		warn("CLAUDE.md is missing the coact contract — run `coact init`")
-	}
-	if hasCoactBlock(filepath.Join(p.Root, "AGENTS.md")) {
-		ok("AGENTS.md has the coact contract")
-	} else {
-		warn("AGENTS.md is missing the coact contract — run `coact init`")
+	for _, ac := range cfg.Agents {
+		ad, found := adapter.Get(ac.ID)
+		if !found {
+			continue
+		}
+		path := filepath.Join(p.Root, ad.ContractFile)
+		if hasCoactBlock(path) {
+			ok(ad.ContractFile + " has the " + ad.ID + " contract")
+		} else {
+			warn(ad.ContractFile + " is missing the " + ad.ID + " contract — run `coact init`")
+		}
 	}
 
 	sessions, _ := presence.List(p.SessionDir())

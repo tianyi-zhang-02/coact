@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/tianyi-zhang-02/coact/internal/adapter"
 	"github.com/tianyi-zhang-02/coact/internal/project"
 )
 
@@ -30,11 +31,11 @@ func cmdDeinit(args []string) int {
 	} else if changed {
 		removed = append(removed, ".claude/settings.json (PreToolUse hook)")
 	}
-	for _, f := range []string{"CLAUDE.md", "AGENTS.md"} {
-		if changed, err := removeMarkedBlock(filepath.Join(p.Root, f)); err != nil {
+	for _, ad := range adapter.All() {
+		if changed, err := removeMarkedBlock(filepath.Join(p.Root, ad.ContractFile)); err != nil {
 			fmt.Fprintf(os.Stderr, "coact: %v\n", err)
 		} else if changed {
-			removed = append(removed, f+" (coact contract)")
+			removed = append(removed, ad.ContractFile+" (coact contract)")
 		}
 	}
 	if *purge {

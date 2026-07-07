@@ -26,6 +26,10 @@ func Run(args []string) int {
 		return cmdClaude(rest)
 	case "codex":
 		return cmdCodex(rest)
+	case "gemini":
+		return cmdGemini(rest)
+	case "adapters":
+		return cmdAdapters(rest)
 	case "worktree":
 		return cmdWorktree(rest)
 	case "merge":
@@ -130,6 +134,8 @@ Commands:
   deinit           Remove coact's wiring (--purge also deletes .coact/)
   claude [args]    Launch Claude Code wired into coact (--worktree to isolate)
   codex [args]     Launch Codex wired into coact (--worktree to isolate)
+  gemini [args]    Launch Gemini CLI wired into coact
+  adapters         List the agents coact can coordinate
   worktree         Manage per-agent git worktrees (add | list | rm)
   merge <agent>    Merge an agent's coact/<agent> branch (stops on conflict)
   status           Show live participants and active locks

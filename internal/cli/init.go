@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/tianyi-zhang-02/coact/internal/adapter"
 	"github.com/tianyi-zhang-02/coact/internal/config"
 	"github.com/tianyi-zhang-02/coact/internal/journal"
 	"github.com/tianyi-zhang-02/coact/internal/project"
@@ -46,21 +47,27 @@ func cmdInit(args []string) int {
 		note(rel(root, p.BoardPath()))
 	}
 
-	// Enforcement hook + agent contracts (all idempotent).
-	if added, err := ensureClaudeHook(root); err != nil {
-		fmt.Fprintf(os.Stderr, "coact: wiring Claude hook: %v\n", err)
-	} else if added {
-		note(".claude/settings.json (Claude PreToolUse hook)")
-	}
-	if added, err := ensureMarkedBlock(filepath.Join(root, "CLAUDE.md"), claudeFragment); err != nil {
-		fmt.Fprintf(os.Stderr, "coact: writing CLAUDE.md: %v\n", err)
-	} else if added {
-		note("CLAUDE.md (coact contract)")
-	}
-	if added, err := ensureMarkedBlock(filepath.Join(root, "AGENTS.md"), codexFragment); err != nil {
-		fmt.Fprintf(os.Stderr, "coact: writing AGENTS.md: %v\n", err)
-	} else if added {
-		note("AGENTS.md (coact contract)")
+	// Enforcement hook + agent contracts, driven by the adapter registry (all
+	// idempotent). Each configured agent gets its contract file; hook-enforced
+	// agents (Claude) also get the PreToolUse hook.
+	cfg, _ := config.Load(p.ConfigPath())
+	for _, ac := range cfg.Agents {
+		ad, ok := adapter.Get(ac.ID)
+		if !ok {
+			continue
+		}
+		if ad.HardHook {
+			if added, err := ensureClaudeHook(root); err != nil {
+				fmt.Fprintf(os.Stderr, "coact: wiring %s hook: %v\n", ad.ID, err)
+			} else if added {
+				note(".claude/settings.json (" + ad.ID + " PreToolUse hook)")
+			}
+		}
+		if added, err := ensureMarkedBlock(filepath.Join(root, ad.ContractFile), ad.Contract()); err != nil {
+			fmt.Fprintf(os.Stderr, "coact: writing %s: %v\n", ad.ContractFile, err)
+		} else if added {
+			note(ad.ContractFile + " (" + ad.ID + " contract)")
+		}
 	}
 
 	ensureGitignore(root)
@@ -79,14 +86,12 @@ func cmdInit(args []string) int {
 verify it works (no second agent needed):
   coact doctor           checks the wiring and runs an enforcement self-test
 
-then run each agent in its own terminal:
-  export COACT_AGENT=claude    # or codex
-  coact sidecar &              # keeps this session's presence live
-  claude                       # or codex
+then launch each agent in its own terminal — one command each:
+  coact claude          # or:  coact codex   /   coact gemini
 
 coact adds a gate — it does not disable your permissions, and the hook fails
-open, so if coact ever errors your editing still works. Undo everything with:
-  coact deinit
+open, so if coact ever errors your editing still works. Run "coact adapters" to
+see the agents it can coordinate, and "coact deinit" to undo everything.
 `)
 	return 0
 }
