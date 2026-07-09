@@ -108,6 +108,26 @@ coact handoff codex "I finished parser changes; tests still need work."
 Messages are local filesystem inbox entries. They are not shell execution, and
 they are journaled.
 
+## Chinese expression quality layer
+
+CoAct includes an opt-in, model-agnostic Chinese expression adapter foundation.
+It is designed for future response pipelines: detect Chinese-heavy output,
+protect fragile technical spans such as code blocks, inline code, URLs, paths,
+and tables, build a constrained polish prompt, validate the polished result, and
+fallback to the raw output if anything looks unsafe.
+
+The first release exposes diagnostics only; it does not call a polishing model by
+itself:
+
+```sh
+echo '这是一个强大的方式来处理这个问题。' | coact zh check
+echo '运行 `coact inbox` 后访问 https://example.com。' | coact zh check --diagnostics
+```
+
+This layer is disabled unless a caller explicitly wires it into a response
+pipeline. It must not change facts, commands, code, URLs, API names, variables,
+or conclusions.
+
 ## Design
 
 ```mermaid
@@ -146,6 +166,7 @@ experimental; it is not required for the main workflow.
 | `coact lock` / `unlock` / `policy` | Manage write intent and policy checks |
 | `coact worktree` / `merge` | Isolate agents on branches and integrate work |
 | `coact versions` / `update` / `switch` | Manage binaries under `~/.coact` |
+| `coact zh check` | Diagnose Chinese expression adapter trigger/protection |
 | `coact ui` | Optional experimental local UI |
 
 Run `coact help` for the full command list.
@@ -159,6 +180,7 @@ Run `coact help` for the full command list.
   sessions, terminal logs, planning runs, and local memory.
 - Hooks fail open: if CoAct errors, it does not brick your editor.
 - `coact update` is opt-in, uses HTTPS, and verifies SHA-256 checksums.
+- The Chinese expression adapter protects technical spans and falls back to raw output on validation failure.
 
 See [SECURITY.md](SECURITY.md) for the full model.
 

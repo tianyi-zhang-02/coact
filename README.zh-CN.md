@@ -104,6 +104,22 @@ coact handoff codex "parser 改完了；测试还需要补。"
 
 消息只是本地 filesystem inbox，不是 shell 执行，并且会写入 journal。
 
+## 中文表达质量层
+
+CoAct 现在包含一个可选、模型无关的中文表达 adapter 基础层。它面向后续 response
+pipeline：检测中文占比较高的输出，保护代码块、inline code、URL、路径和表格等技术
+span，构造受约束的润色 prompt，校验润色结果；一旦不安全就回退到原始输出。
+
+第一版只暴露诊断能力，不会自己调用润色模型：
+
+```sh
+echo '这是一个强大的方式来处理这个问题。' | coact zh check
+echo '运行 `coact inbox` 后访问 https://example.com。' | coact zh check --diagnostics
+```
+
+这个层默认不会影响 agent 输出，只有调用方显式接入 response pipeline 才会运行。它不能
+改变事实、命令、代码、URL、API 名、变量名或结论。
+
 ## 设计
 
 ```mermaid
@@ -141,6 +157,7 @@ flowchart TB
 | `coact lock` / `unlock` / `policy` | 管理写入意图和策略检查 |
 | `coact worktree` / `merge` | 用分支隔离 agent，并集成工作 |
 | `coact versions` / `update` / `switch` | 管理 `~/.coact` 下的二进制版本 |
+| `coact zh check` | 诊断中文表达 adapter 是否触发、保护哪些 span |
 | `coact ui` | 可选实验性本地 UI |
 
 完整命令见 `coact help`。
@@ -153,6 +170,7 @@ flowchart TB
 - 运行时/敏感协作状态默认 gitignore：inbox、journal、locks、session、terminal logs、planning runs、本地 memory。
 - hook 失败开放：如果 CoAct 出错，不会锁死编辑器。
 - `coact update` 是可选功能，使用 HTTPS，并校验 SHA-256。
+- 中文表达 adapter 会保护技术 span；校验失败时直接回退原文。
 
 完整模型见 [SECURITY.md](SECURITY.md)。
 

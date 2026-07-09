@@ -34,6 +34,8 @@ func Run(args []string) int {
 		return cmdGemini(rest)
 	case "adapters":
 		return cmdAdapters(rest)
+	case "zh":
+		return cmdZH(rest)
 	case "worktree":
 		return cmdWorktree(rest)
 	case "merge":
@@ -158,6 +160,7 @@ Commands:
   codex [args]     Launch Codex wired into coact (--worktree to isolate)
   gemini [args]    Launch Gemini CLI wired into coact
   adapters         List the agents coact can coordinate
+  zh check         Diagnose the Chinese expression adapter trigger/protection
   worktree         Manage per-agent git worktrees (add | list | rm)
   merge <agent>    Merge an agent's coact/<agent> branch (stops on conflict)
   status           Show live participants and active locks
