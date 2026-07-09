@@ -9,32 +9,30 @@ const indexHTML = `<!doctype html>
   <style>
     :root {
       color-scheme: dark;
-      --bg:#090a0d;
-      --rail:#0f1117;
-      --surface:#141720;
-      --surface-2:#191d28;
-      --surface-3:#202636;
-      --text:#f4f1ea;
-      --muted:#9ba3af;
-      --soft:#c8ced8;
-      --line:#2a303c;
-      --line-2:#394150;
-      --accent:#d6b16a;
-      --accent-2:#8ab4f8;
-      --ok:#8bd9a8;
-      --warn:#f3c969;
-      --bad:#f07d90;
-      --shadow:0 18px 54px #0008;
-      --radius:18px;
+      --bg:#0d0e11;
+      --rail:#101114;
+      --surface:#15171b;
+      --surface-2:#1a1d22;
+      --surface-3:#20242b;
+      --text:#f2f2f2;
+      --muted:#989da6;
+      --soft:#c3c7ce;
+      --line:#2a2e35;
+      --line-2:#383d46;
+      --accent:#8fb4ff;
+      --accent-2:#8fb4ff;
+      --ok:#85d69a;
+      --warn:#e2c16f;
+      --bad:#e8798a;
+      --shadow:none;
+      --radius:14px;
     }
     * { box-sizing:border-box; }
     body {
       margin:0;
       min-height:100vh;
       font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background:
-        radial-gradient(circle at 78% -10%, #253044 0 18rem, transparent 34rem),
-        linear-gradient(135deg, #0a0b0f, #0d1017 48%, #090a0d);
+      background:var(--bg);
       color:var(--text);
     }
     h1, h2, h3, p { margin:0; }
@@ -53,13 +51,13 @@ const indexHTML = `<!doctype html>
     }
     button {
       cursor:pointer;
-      background:linear-gradient(180deg, #262d3b, #1a1f2b);
-      border-color:#3b4558;
-      box-shadow:0 8px 22px #0005;
-      transition:border-color .15s ease, transform .15s ease, background .15s ease;
+      background:var(--surface-2);
+      border-color:var(--line-2);
+      box-shadow:none;
+      transition:border-color .15s ease, background .15s ease;
       white-space:nowrap;
     }
-    button:hover { border-color:#5b6679; transform:translateY(-1px); }
+    button:hover { background:var(--surface-3); border-color:#4a515d; }
     button:active { transform:translateY(0); }
     button:disabled {
       cursor:not-allowed;
@@ -71,7 +69,7 @@ const indexHTML = `<!doctype html>
     input, select { width:100%; }
     textarea { width:100%; min-height:142px; resize:vertical; line-height:1.5; }
     input::placeholder, textarea::placeholder { color:#777f8d; }
-    input:focus, textarea:focus, select:focus { border-color:var(--accent); box-shadow:0 0 0 4px #d6b16a20; }
+    input:focus, textarea:focus, select:focus { border-color:var(--accent); box-shadow:0 0 0 3px #8fb4ff18; }
     code {
       display:inline-block;
       max-width:100%;
@@ -87,7 +85,7 @@ const indexHTML = `<!doctype html>
     }
     .shell {
       display:grid;
-      grid-template-columns:260px minmax(0, 1fr);
+      grid-template-columns:220px minmax(0, 1fr);
       min-height:100vh;
     }
     .rail {
@@ -96,10 +94,10 @@ const indexHTML = `<!doctype html>
       height:100vh;
       display:flex;
       flex-direction:column;
-      gap:24px;
-      padding:22px;
+      gap:16px;
+      padding:18px;
       border-right:1px solid var(--line);
-      background:linear-gradient(180deg, #11141c, #0c0e13);
+      background:var(--rail);
     }
     .brand {
       display:flex;
@@ -112,9 +110,10 @@ const indexHTML = `<!doctype html>
       place-items:center;
       width:38px;
       height:38px;
-      border-radius:12px;
-      background:linear-gradient(145deg, #f0d99b, #8ab4f8);
-      color:#090a0d;
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:var(--surface-2);
+      color:var(--text);
       font-weight:900;
       letter-spacing:-.06em;
     }
@@ -137,11 +136,12 @@ const indexHTML = `<!doctype html>
       font-size:13px;
       text-align:left;
     }
-    .nav-item:hover { color:var(--text); background:#171b25; border-color:var(--line); }
-    .nav-item.active { color:var(--text); background:#171b25; border-color:var(--line); }
+    .nav-item:hover { color:var(--text); background:var(--surface); border-color:var(--line); }
+    .nav-item.active { color:var(--text); background:var(--surface-2); border-color:var(--line-2); }
     .nav-item span:last-child { color:#68707e; font-size:11px; }
     .nav-item.active span:last-child { color:var(--accent); }
     .rail-footer {
+      display:none;
       margin-top:auto;
       padding:12px;
       border:1px solid var(--line);
@@ -153,23 +153,23 @@ const indexHTML = `<!doctype html>
     }
     .main {
       min-width:0;
-      padding:24px;
+      padding:20px;
     }
     .topbar {
       display:flex;
       justify-content:space-between;
       align-items:flex-start;
       gap:22px;
-      padding:22px;
+      padding:18px;
       border:1px solid var(--line);
-      border-radius:24px;
-      background:linear-gradient(180deg, #171b25d9, #11151de8);
-      box-shadow:var(--shadow);
+      border-radius:20px;
+      background:var(--surface);
+      box-shadow:none;
     }
     .headline {
       display:flex;
       flex-direction:column;
-      gap:10px;
+      gap:7px;
       min-width:0;
     }
     .eyebrow {
@@ -195,8 +195,24 @@ const indexHTML = `<!doctype html>
       padding:7px 10px;
       border:1px solid var(--line);
       border-radius:10px;
-      background:#0c0f15;
+      background:#111318;
       cursor:default;
+    }
+    .project-bar {
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap:wrap;
+      margin-top:2px;
+    }
+    .project-bar select {
+      width:min(420px, 100%);
+      min-width:240px;
+      background:#101217;
+    }
+    .project-hint {
+      color:var(--muted);
+      font-size:12px;
     }
     .status-panel {
       display:flex;
@@ -215,18 +231,31 @@ const indexHTML = `<!doctype html>
       display:grid;
       grid-template-columns:repeat(4, minmax(0, 1fr));
       gap:12px;
-      margin:18px 0;
+      margin:0;
     }
     .metric {
       min-width:0;
       padding:15px;
       border:1px solid var(--line);
       border-radius:16px;
-      background:linear-gradient(180deg, var(--surface), #10141c);
+      background:var(--surface);
     }
     .metric span { display:block; color:var(--muted); font-size:12px; }
     .metric strong { display:block; margin-top:7px; font-size:26px; line-height:1; letter-spacing:-.04em; }
     .metric small { display:block; margin-top:8px; min-height:16px; color:var(--soft); font-size:12px; }
+    .status-drawer {
+      margin-top:14px;
+      border:1px solid var(--line);
+      border-radius:16px;
+      background:var(--surface);
+    }
+    .status-drawer summary {
+      cursor:pointer;
+      padding:12px 14px;
+      color:var(--soft);
+      font-weight:700;
+    }
+    .status-drawer .metrics { padding:0 14px 14px; }
     .pages {
       margin-top:18px;
     }
@@ -247,8 +276,8 @@ const indexHTML = `<!doctype html>
       padding:17px;
       border:1px solid var(--line);
       border-radius:var(--radius);
-      background:linear-gradient(180deg, #151922, #11151d);
-      box-shadow:0 12px 32px #0005;
+      background:var(--surface);
+      box-shadow:none;
     }
     .span-12 { grid-column:span 12; }
     .span-8 { grid-column:span 8; }
@@ -284,15 +313,14 @@ const indexHTML = `<!doctype html>
       background:#10141d;
       white-space:nowrap;
     }
-    .badge.ok { color:#c8f5d7; border-color:#3d7351; background:#132119; }
-    .badge.warn { color:#f7dfa2; border-color:#7f6a36; background:#241e12; }
-    .badge.bad { color:#ffc1cb; border-color:#80424f; background:#26151a; }
+    .badge.ok { color:#b7efc7; border-color:#2e6040; background:#142018; }
+    .badge.warn { color:#ead18b; border-color:#64552f; background:#211d13; }
+    .badge.bad { color:#f0b1bd; border-color:#673845; background:#23171b; }
     .dot {
       width:7px;
       height:7px;
       border-radius:50%;
       background:currentColor;
-      box-shadow:0 0 12px currentColor;
     }
     .command {
       display:grid;
@@ -300,7 +328,7 @@ const indexHTML = `<!doctype html>
       padding:12px;
       border:1px solid var(--line);
       border-radius:14px;
-      background:#0f131b;
+      background:#111318;
     }
     .cmd-head {
       display:flex;
@@ -318,7 +346,38 @@ const indexHTML = `<!doctype html>
       font-size:12.5px;
       line-height:1.5;
     }
-    .task-list, .agent-list, .version-list, .log-list { display:flex; flex-direction:column; gap:9px; }
+    .task-list, .agent-list, .version-list, .log-list { display:flex; flex-direction:column; gap:7px; }
+    .work-terminal-list {
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .work-terminal-tabs {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(170px, 1fr));
+      gap:8px;
+      padding-bottom:2px;
+    }
+    .work-terminal-tab {
+      min-width:0;
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding:9px 12px;
+      border-radius:999px;
+      color:var(--muted);
+    }
+    .work-terminal-tab strong {
+      min-width:0;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .work-terminal-tab.active {
+      color:var(--text);
+      border-color:var(--line-2);
+      background:var(--surface-2);
+    }
     .doc-list { display:flex; flex-direction:column; gap:10px; }
     .task-card, .agent-card, .lock-card, .version-card {
       display:grid;
@@ -326,11 +385,72 @@ const indexHTML = `<!doctype html>
       padding:12px;
       border:1px solid var(--line);
       border-radius:14px;
-      background:#0f131b;
+      background:#111318;
+    }
+    details.card > summary {
+      list-style:none;
+      cursor:pointer;
+    }
+    details.card > summary::-webkit-details-marker { display:none; }
+    .board-summary {
+      margin:-17px -17px 0;
+      padding:17px;
+      border-radius:var(--radius) var(--radius) 0 0;
+    }
+    .board-summary:hover { background:#181b20; }
+    .board-details:not([open]) .board-summary {
+      margin-bottom:-17px;
+      border-radius:var(--radius);
+    }
+    .board-body {
+      padding-top:14px;
+      border-top:1px solid var(--line);
     }
     .task-card {
       grid-template-columns:70px minmax(0, 1fr) auto;
       align-items:center;
+    }
+    .task-row {
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#101217;
+    }
+    .task-row summary,
+    .task-row-line {
+      min-width:0;
+      display:grid;
+      grid-template-columns:72px minmax(0, 1fr) auto;
+      gap:10px;
+      align-items:center;
+      padding:10px 12px;
+      list-style:none;
+    }
+    .task-row summary { cursor:pointer; }
+    .task-row summary::-webkit-details-marker { display:none; }
+    .task-row.is-done {
+      opacity:.72;
+      background:#0f1115;
+    }
+    .task-row.is-done .task-title {
+      text-decoration:line-through;
+      color:var(--muted);
+    }
+    .task-row-actions {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      padding:0 12px 12px 94px;
+    }
+    .task-row-id {
+      color:var(--muted);
+      font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size:12px;
+    }
+    .task-row-tags {
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
     }
     .task-title { color:var(--text); line-height:1.35; overflow-wrap:anywhere; }
     .task-meta { display:flex; gap:7px; flex-wrap:wrap; margin-top:7px; }
@@ -338,7 +458,7 @@ const indexHTML = `<!doctype html>
       padding:14px;
       border:1px solid var(--line);
       border-radius:14px;
-      background:#0f131b;
+      background:#111318;
     }
     .doc-card h3 {
       font-size:15px;
@@ -370,24 +490,408 @@ const indexHTML = `<!doctype html>
       font-weight:750;
     }
     .agent-sub { margin-top:7px; color:var(--muted); font-size:13px; }
-    .terminal-preview {
-      min-height:170px;
+    .work-terminal-card {
+      min-width:0;
       padding:14px;
       border:1px solid var(--line);
       border-radius:14px;
-      background:#07090d;
+      background:#111318;
+    }
+    .work-terminal-card.is-live { border-color:#31573f; }
+    .work-terminal-head {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:10px;
+    }
+    .work-terminal-title {
+      display:flex;
+      gap:10px;
+      align-items:center;
+      min-width:0;
+    }
+    .work-terminal-title strong {
+      display:block;
+      color:var(--text);
+      line-height:1.2;
+    }
+    .work-terminal-title span {
+      display:block;
+      margin-top:4px;
+      color:var(--muted);
+      font-size:12px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .work-terminal-meta {
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
+    .work-terminal-actions {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
+    .agent-command-box {
+      display:grid;
+      gap:8px;
+      margin-top:12px;
+      padding-top:12px;
+      border-top:1px solid var(--line);
+    }
+    .agent-command-box textarea {
+      min-height:74px;
+      background:#0f1117;
+    }
+    .work-terminal-card details {
+      margin-top:12px;
+      border-top:1px solid var(--line);
+      padding-top:10px;
+    }
+    .work-terminal-card summary {
+      cursor:pointer;
+      color:var(--soft);
+      font-size:12px;
+      font-weight:750;
+    }
+    .work-terminal-output {
+      min-height:280px;
+      max-height:56vh;
+      margin:10px 0 0;
+      padding:12px;
+      border:1px solid #1d2430;
+      border-radius:10px;
+      background:#05070a;
       color:#d7deea;
+      overflow:auto;
+      white-space:pre-wrap;
+      overflow-wrap:anywhere;
       font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size:12px;
-      line-height:1.55;
+      line-height:1.45;
+    }
+    .session-grid {
+      display:block;
+    }
+    .terminal-hub {
+      display:grid;
+      grid-template-columns:260px minmax(0, 1fr);
+      gap:12px;
+      align-items:stretch;
+    }
+    .agent-switcher {
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      min-width:0;
+    }
+    .agent-switch {
+      width:100%;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+      padding:12px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:#101217;
+      color:var(--muted);
+      text-align:left;
+      white-space:normal;
+      box-shadow:none;
+    }
+    .agent-switch:hover { background:#141720; border-color:var(--line-2); }
+    .agent-switch.active {
+      color:var(--text);
+      border-color:#31573f;
+      background:#111a15;
+    }
+    .agent-switch-top {
+      display:flex;
+      justify-content:space-between;
+      gap:8px;
+      align-items:center;
+    }
+    .agent-switch-name {
+      display:flex;
+      gap:8px;
+      align-items:center;
+      min-width:0;
+      font-weight:800;
+    }
+    .agent-switch-name span:last-child {
+      min-width:0;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .agent-switch-meta {
+      display:flex;
+      gap:6px;
+      flex-wrap:wrap;
+      font-size:12px;
+    }
+    .terminal-pane {
+      min-width:0;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      padding:14px;
+      border:1px solid var(--line);
+      border-radius:16px;
+      background:#111318;
+    }
+    .terminal-pane.is-live { border-color:#31573f; }
+    .terminal-pane.is-offline { color:var(--muted); }
+    .terminal-toolbar {
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      align-items:flex-start;
+      flex-wrap:wrap;
+    }
+    .terminal-title {
+      display:flex;
+      gap:10px;
+      align-items:center;
+      min-width:0;
+    }
+    .terminal-title-copy {
+      min-width:0;
+    }
+    .terminal-title-copy strong {
+      display:block;
+      color:var(--text);
+      font-size:16px;
+      line-height:1.2;
+    }
+    .terminal-title-copy span {
+      display:block;
+      margin-top:3px;
+      color:var(--muted);
+      font-size:12px;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .terminal-controls {
+      display:flex;
+      gap:8px;
+      align-items:center;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+    .font-controls {
+      display:flex;
+      gap:4px;
+      padding:3px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#0c0f15;
+    }
+    .font-controls button {
+      padding:5px 8px;
+      border-radius:8px;
+      font-size:12px;
+      background:transparent;
+    }
+    .terminal-meta-grid {
+      display:grid;
+      grid-template-columns:repeat(4, minmax(0, 1fr));
+      gap:8px;
+    }
+    .terminal-meta {
+      min-width:0;
+      padding:8px 10px;
+      border:1px solid var(--line);
+      border-radius:10px;
+      background:#0f1117;
+    }
+    .terminal-meta span {
+      display:block;
+      color:#7f8898;
+      font-size:11px;
+    }
+    .terminal-meta strong {
+      display:block;
+      margin-top:3px;
+      color:var(--soft);
+      font-size:12px;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .provider {
+      display:flex;
+      gap:10px;
+      align-items:center;
+      min-width:0;
+    }
+    .provider-mark {
+      display:grid;
+      place-items:center;
+      flex:0 0 auto;
+      width:36px;
+      height:36px;
+      border:1px solid var(--line-2);
+      border-radius:10px;
+      background:#0f1013;
+      color:var(--text);
+      font-weight:850;
+      letter-spacing:-.05em;
+    }
+    .provider-openai .provider-mark { border-radius:50%; }
+    .provider-claude .provider-mark { border-radius:11px; }
+    .provider-gemini .provider-mark { border-radius:50%; }
+    .provider-copy { min-width:0; }
+    .provider-copy strong {
+      display:block;
+      color:var(--text);
+      font-size:15px;
+      line-height:1.2;
+    }
+    .provider-copy span {
+      display:block;
+      margin-top:3px;
+      color:var(--muted);
+      font-size:12px;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .model-line {
+      display:flex;
+      gap:8px;
+      flex-wrap:wrap;
+      align-items:center;
+      color:var(--soft);
+      font-size:12px;
+    }
+    .session-state {
+      flex:1 1 auto;
+      display:flex;
+      flex-direction:column;
+      gap:7px;
+      padding:12px;
+      border:1px solid var(--line);
+      border-radius:12px;
+      background:#101217;
+      color:var(--soft);
+      font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size:12px;
+      line-height:1.45;
+    }
+    .term-row {
+      display:grid;
+      grid-template-columns:72px minmax(0, 1fr);
+      gap:10px;
+    }
+    .term-prompt { color:#7f8898; }
+    .term-value {
+      min-width:0;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .term-muted {
+      margin-top:3px;
+      color:#8d96a6;
+      white-space:normal;
+    }
+    .mirror-meta {
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      color:#8d96a6;
+      font-family:ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size:11.5px;
+    }
+    .mirror-output {
+      flex:1 1 auto;
+      min-height:480px;
+      max-height:68vh;
+      margin:0;
+      padding:14px;
+      border:1px solid #1d2430;
+      border-radius:10px;
+      background:#05070a;
+      overflow:auto;
       white-space:pre-wrap;
+      overflow-wrap:anywhere;
+      color:#d7deea;
+      line-height:1.45;
+      tab-size:2;
+    }
+    .mirror-output.is-empty {
+      color:#7f8898;
+      font-style:italic;
+    }
+    .mirror-output .ansi-bold { font-weight:800; }
+    .mirror-output .ansi-dim { opacity:.68; }
+    .mirror-output .ansi-italic { font-style:italic; }
+    .mirror-output .ansi-underline { text-decoration:underline; }
+    .mirror-output .ansi-inverse {
+      color:#05070a;
+      background:#d7deea;
+    }
+    .mirror-output .ansi-fg-30 { color:#7f8898; }
+    .mirror-output .ansi-fg-31 { color:#ff8b92; }
+    .mirror-output .ansi-fg-32 { color:#95d59b; }
+    .mirror-output .ansi-fg-33 { color:#e7c76f; }
+    .mirror-output .ansi-fg-34 { color:#8fb4ff; }
+    .mirror-output .ansi-fg-35 { color:#d7a5ff; }
+    .mirror-output .ansi-fg-36 { color:#7fd7df; }
+    .mirror-output .ansi-fg-37 { color:#d7deea; }
+    .mirror-output .ansi-fg-90 { color:#9aa4b2; }
+    .mirror-output .ansi-fg-91 { color:#ffabb0; }
+    .mirror-output .ansi-fg-92 { color:#b7efc7; }
+    .mirror-output .ansi-fg-93 { color:#f2da8a; }
+    .mirror-output .ansi-fg-94 { color:#b7ccff; }
+    .mirror-output .ansi-fg-95 { color:#e5c2ff; }
+    .mirror-output .ansi-fg-96 { color:#a7edf2; }
+    .mirror-output .ansi-fg-97 { color:#ffffff; }
+    .mirror-output .ansi-bg-40 { background:#05070a; }
+    .mirror-output .ansi-bg-41 { background:#5a1f28; }
+    .mirror-output .ansi-bg-42 { background:#1f4b2b; }
+    .mirror-output .ansi-bg-43 { background:#55451d; }
+    .mirror-output .ansi-bg-44 { background:#1f315a; }
+    .mirror-output .ansi-bg-45 { background:#3b255a; }
+    .mirror-output .ansi-bg-46 { background:#1d5055; }
+    .mirror-output .ansi-bg-47 { background:#d7deea; color:#05070a; }
+    .mirror-output .ansi-bg-100 { background:#202633; }
+    .mirror-output .ansi-bg-101 { background:#7a2a36; }
+    .mirror-output .ansi-bg-102 { background:#28623a; }
+    .mirror-output .ansi-bg-103 { background:#705a25; }
+    .mirror-output .ansi-bg-104 { background:#2a4174; }
+    .mirror-output .ansi-bg-105 { background:#4f3275; }
+    .mirror-output .ansi-bg-106 { background:#27686f; }
+    .mirror-output .ansi-bg-107 { background:#ffffff; color:#05070a; }
+    .session-foot {
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+    }
+    .sync-note {
+      margin-top:12px;
+      padding:12px;
+      border:1px solid var(--line);
+      border-radius:14px;
+      background:#101217;
+      color:var(--muted);
+      font-size:13px;
+      line-height:1.55;
     }
     .empty {
       padding:16px;
       border:1px dashed var(--line-2);
       border-radius:14px;
       color:var(--muted);
-      background:#10141d80;
+      background:#111318;
     }
     .log {
       max-height:330px;
@@ -407,9 +911,9 @@ const indexHTML = `<!doctype html>
       padding:12px 14px;
       border:1px solid var(--line-2);
       border-radius:14px;
-      background:#151922ee;
+      background:#17191f;
       color:var(--text);
-      box-shadow:0 18px 50px #0008;
+      box-shadow:none;
       opacity:0;
       transform:translateY(10px);
       pointer-events:none;
@@ -435,6 +939,11 @@ const indexHTML = `<!doctype html>
       .topbar { flex-direction:column; }
       .status-panel { align-items:flex-start; min-width:0; }
       .status-line { justify-content:flex-start; }
+      .terminal-hub { grid-template-columns:1fr; }
+      .agent-switcher {
+        display:grid;
+        grid-template-columns:repeat(3, minmax(180px, 1fr));
+      }
     }
     @media (max-width: 680px) {
       .main { padding:14px; }
@@ -454,33 +963,49 @@ const indexHTML = `<!doctype html>
       .metric strong { font-size:23px; }
       .grid2 { grid-template-columns:1fr; }
       .task-card, .command, .agent-card { grid-template-columns:1fr; }
+      .task-row summary,
+      .task-row-line {
+        grid-template-columns:1fr;
+        gap:7px;
+      }
+      .task-row-tags { justify-content:flex-start; }
+      .task-row-actions { padding:0 12px 12px; }
       .row { flex-direction:column; align-items:stretch; }
+      .agent-switcher {
+        display:flex;
+        flex-direction:row;
+        overflow:auto;
+        padding-bottom:2px;
+      }
+      .agent-switch { flex:0 0 220px; }
+      .terminal-meta-grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+      .mirror-output { min-height:360px; max-height:60vh; }
     }
     @media (max-width: 460px) {
       .metrics { grid-template-columns:1fr; }
     }
     button.primary {
-      background:linear-gradient(180deg, #eccf8d, #cfa860);
-      border-color:#eccf8d;
-      color:#241a08;
+      background:var(--text);
+      border-color:var(--text);
+      color:#111318;
       font-weight:700;
-      box-shadow:0 10px 26px #caa85f30;
+      box-shadow:none;
     }
-    button.primary:hover { border-color:#f6dea0; }
+    button.primary:hover { background:#dfe2e7; border-color:#dfe2e7; }
     .next-step {
       display:flex;
       flex-wrap:wrap;
       justify-content:space-between;
       align-items:center;
       gap:18px;
-      padding:20px 22px;
-      margin-bottom:18px;
+      padding:18px;
+      margin-bottom:16px;
       border:1px solid var(--line-2);
-      border-radius:20px;
-      background:linear-gradient(120deg, #1d2436, #14192400);
-      box-shadow:var(--shadow);
+      border-radius:var(--radius);
+      background:var(--surface);
+      box-shadow:none;
     }
-    .next-step.done { background:linear-gradient(120deg, #15271d, #14192400); border-color:#2f5540; }
+    .next-step.done { background:var(--surface); border-color:#2f5540; }
     .next-step .ns-body { min-width:min(100%, 340px); flex:1 1 340px; display:flex; flex-direction:column; gap:7px; }
     .next-step .ns-step { color:var(--accent); font-size:11px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
     .next-step.done .ns-step { color:var(--ok); }
@@ -501,10 +1026,10 @@ const indexHTML = `<!doctype html>
       color:var(--muted);
     }
     .check.is-done { color:var(--text); }
-    .check.is-done .check-mark { background:#14281c; border-color:#3d7351; color:#8bd9a8; }
+    .check.is-done .check-mark { background:#142018; border-color:#2e6040; color:var(--ok); }
     .lead { color:var(--soft); font-size:15px; line-height:1.62; }
     .concept-row { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; margin-top:4px; }
-    .concept { padding:13px; border:1px solid var(--line); border-radius:13px; background:#0f131b; }
+    .concept { padding:13px; border:1px solid var(--line); border-radius:13px; background:#111318; }
     .concept strong { display:block; color:var(--text); font-size:14px; margin-bottom:5px; }
     .concept span { color:var(--muted); font-size:12.5px; line-height:1.5; }
     .steps { display:flex; flex-direction:column; gap:13px; }
@@ -516,8 +1041,9 @@ const indexHTML = `<!doctype html>
       width:26px;
       height:26px;
       border-radius:50%;
-      background:linear-gradient(145deg, #f0d99b, #8ab4f8);
-      color:#0a0b0f;
+      border:1px solid var(--line-2);
+      background:var(--surface-2);
+      color:var(--soft);
       font-weight:800;
       font-size:13px;
     }
@@ -535,31 +1061,30 @@ const indexHTML = `<!doctype html>
         <div class="brand-mark">Co</div>
         <div class="brand-title">
           <strong>CoAct</strong>
-          <span>Local control plane</span>
+          <span>Terminal + memory bridge</span>
         </div>
       </div>
       <nav class="rail-nav" aria-label="Dashboard pages">
-        <button class="nav-item active" type="button" data-page-target="overview"><span>Overview</span><span>01</span></button>
-        <button class="nav-item" type="button" data-page-target="guide"><span>Guide</span><span>02</span></button>
-        <button class="nav-item" type="button" data-page-target="brief"><span>Brief</span><span>03</span></button>
-        <button class="nav-item" type="button" data-page-target="tasks"><span>Tasks</span><span>04</span></button>
-        <button class="nav-item" type="button" data-page-target="agents"><span>Agents</span><span>05</span></button>
-        <button class="nav-item" type="button" data-page-target="messages"><span>Messages</span><span>06</span></button>
-        <button class="nav-item" type="button" data-page-target="versions"><span>Versions</span><span>07</span></button>
-        <button class="nav-item" type="button" data-page-target="log"><span>Audit log</span><span>08</span></button>
+        <button class="nav-item active" type="button" data-page-target="overview"><span>Setup</span><span>01</span></button>
+        <button class="nav-item" type="button" data-page-target="work"><span>Work</span><span>02</span></button>
       </nav>
       <div class="rail-footer">
-        Local-only UI. No arbitrary shell execution. Mutations use CoAct's journaled APIs.
+        Local-only UI. <a href="https://github.com/tianyi-zhang-02/coact" target="_blank" rel="noreferrer">Docs on GitHub</a>.
       </div>
     </aside>
 
     <div class="main">
       <header class="topbar">
         <div class="headline">
-          <div class="eyebrow">Multi-agent workspace</div>
+          <div class="eyebrow">Shared project workspace</div>
           <h1>CoAct Control Center</h1>
-          <p class="subtitle">Brief your agents, hand out tasks, and see who's editing what — so Claude, Codex, and Gemini share one repo without copy-paste or collisions.</p>
+          <p class="subtitle">Pick a project, start agents in their native terminals, and keep their brief, tasks, locks, and audit trail synced in one local workspace.</p>
           <div class="workspace" id="workspace" title="">Loading workspace…</div>
+          <div class="project-bar">
+            <select id="projectSelect" title="Active project"></select>
+            <button class="small ghost" type="button" data-add-project>Add folder</button>
+            <span class="project-hint">Switching projects changes board, locks, messages, launch folder, and agent state.</span>
+          </div>
         </div>
         <div class="status-panel">
           <div class="status-line">
@@ -573,12 +1098,6 @@ const indexHTML = `<!doctype html>
       <main class="pages">
         <section class="page-view active" data-page="overview">
           <div class="next-step" id="nextStep"></div>
-          <section class="metrics" aria-label="Workspace summary">
-            <div class="metric"><span>Tasks</span><strong id="metricTasks">—</strong><small id="metricTasksSub">waiting</small></div>
-            <div class="metric"><span>Live agents</span><strong id="metricAgents">—</strong><small id="metricAgentsSub">heartbeat</small></div>
-            <div class="metric"><span>Locks</span><strong id="metricLocks">—</strong><small>conflict gate</small></div>
-            <div class="metric"><span>Mode</span><strong id="metricMode">—</strong><small id="metricModeSub">workspace</small></div>
-          </section>
           <div class="page-grid">
             <section class="card span-5" id="setup">
               <div class="section-head">
@@ -591,7 +1110,7 @@ const indexHTML = `<!doctype html>
               <div class="stack">
                 <p class="muted">Four steps to a coordinated workspace. Your next action is highlighted above.</p>
                 <div class="checklist" id="checklist"></div>
-                <div class="soft">Full health check from a terminal: <code>coact doctor</code></div>
+                <div class="soft">Full health check from a terminal: <code>coact doctor</code> · docs: <a href="https://github.com/tianyi-zhang-02/coact" target="_blank" rel="noreferrer">GitHub README</a></div>
               </div>
             </section>
 
@@ -604,9 +1123,18 @@ const indexHTML = `<!doctype html>
                 <span class="badge">built-in adapters</span>
               </div>
               <div id="launch" class="stack muted">Loading commands…</div>
-              <p class="hint" style="margin-top:12px">Start opens the agent in a new terminal, already wired into CoAct. Only these built-in adapters can be launched — the UI never runs arbitrary shell commands.</p>
+              <p class="hint" style="margin-top:12px">On macOS, Start opens the agent in its native terminal and wires it into the same CoAct bridge. Other platforms can copy the command and run it manually. The control center never exposes arbitrary shell execution.</p>
             </section>
           </div>
+          <details class="status-drawer">
+            <summary>Workspace status</summary>
+            <section class="metrics" aria-label="Workspace summary">
+              <div class="metric"><span>Tasks</span><strong id="metricTasks">—</strong><small id="metricTasksSub">waiting</small></div>
+              <div class="metric"><span>Live agents</span><strong id="metricAgents">—</strong><small id="metricAgentsSub">heartbeat</small></div>
+              <div class="metric"><span>Locks</span><strong id="metricLocks">—</strong><small>conflict gate</small></div>
+              <div class="metric"><span>Mode</span><strong id="metricMode">—</strong><small id="metricModeSub">workspace</small></div>
+            </section>
+          </details>
         </section>
 
         <section class="page-view" data-page="guide">
@@ -620,12 +1148,12 @@ const indexHTML = `<!doctype html>
                 <span class="badge">2-minute read</span>
               </div>
               <div class="stack">
-                <p class="lead">CoAct lets several AI coding agents — Claude Code, Codex, Gemini — work in the <strong>same repository at the same time</strong> without stepping on each other. You stay in charge: you write one shared brief and a task list, each agent claims its own tasks, and CoAct's file locks stop two agents from editing the same file. Everything they do is written to a journal you can replay.</p>
+                <p class="lead">CoAct is a local terminal hub and project-memory bridge for coding agents. Claude Code, Codex, and Gemini keep their native CLI behavior, while CoAct gathers their project context into the same brief, task board, inbox, locks, and journal. On macOS it can also launch native terminal sessions from the control center.</p>
                 <div class="concept-row">
-                  <div class="concept"><strong>Shared brief</strong><span>One source of context every agent reads.</span></div>
-                  <div class="concept"><strong>Task board</strong><span>Agents claim tasks, so work never overlaps.</span></div>
+                  <div class="concept"><strong>Terminal hub</strong><span>Bring agent terminals together without redesigning their UI.</span></div>
+                  <div class="concept"><strong>Project memory</strong><span>Brief, tasks, messages, and journal live in one local layer.</span></div>
                   <div class="concept"><strong>File locks</strong><span>Two agents can't edit the same file at once.</span></div>
-                  <div class="concept"><strong>Audit log</strong><span>Every action is recorded for you to review.</span></div>
+                  <div class="concept"><strong>Task board</strong><span>Agents claim work, so effort stays coordinated.</span></div>
                 </div>
               </div>
             </section>
@@ -642,9 +1170,9 @@ const indexHTML = `<!doctype html>
                 <div class="doc-card">
                   <h3>The 3-step workflow</h3>
                   <div class="steps" style="margin-top:12px">
-                    <div class="step-item"><span class="step-num">1</span><div class="step-body"><strong>Initialize the repo</strong><span>Once per project, from the Overview or with <code>coact init</code>. It wires the enforcement hook and drops the agent contracts.</span></div></div>
-                    <div class="step-item"><span class="step-num">2</span><div class="step-body"><strong>Write the brief, add tasks</strong><span>Set the shared context on the Brief page, then add concrete tasks agents can claim on the Tasks page.</span></div></div>
-                    <div class="step-item"><span class="step-num">3</span><div class="step-body"><strong>Start the agents</strong><span>Launch Claude and Codex from the Overview. As they work, coordinate through Messages, Tasks, and Locks.</span></div></div>
+                    <div class="step-item"><span class="step-num">1</span><div class="step-body"><strong>Initialize the repo</strong><span>Once per project, from the Overview or with <code>coact init</code>. It creates the local bridge and agent contracts.</span></div></div>
+                    <div class="step-item"><span class="step-num">2</span><div class="step-body"><strong>Create shared project memory</strong><span>Write the brief and add tasks/messages that every agent can read before it starts working.</span></div></div>
+                    <div class="step-item"><span class="step-num">3</span><div class="step-body"><strong>Start agents</strong><span>Launch Claude, Codex, or Gemini. On macOS, CoAct opens native terminals; on other platforms, copy the generated command.</span></div></div>
                   </div>
                 </div>
                 <div class="doc-card" id="currentVersionGuide">Loading current version…</div>
@@ -671,8 +1199,8 @@ const indexHTML = `<!doctype html>
               </div>
               <div class="doc-list">
                 <details class="doc-card" open>
-                  <summary>Do I still need separate terminals?</summary>
-                  <p>For this release, yes. The UI can open native local terminals for installed agents. Fully embedded browser terminals require the next PTY/WebSocket layer.</p>
+                  <summary>Is CoAct redesigning the agent terminal?</summary>
+                  <p>No. CoAct keeps each CLI native. It stores shared project memory under <code>.coact</code>, and on macOS it can launch allowlisted agent terminals from the local control center.</p>
                 </details>
                 <details class="doc-card">
                   <summary>Does CoAct execute arbitrary commands?</summary>
@@ -703,7 +1231,7 @@ const indexHTML = `<!doctype html>
                 </details>
                 <details class="doc-card">
                   <summary>Coordination model</summary>
-                  <p>Tasks, messages, locks, presence, and logs are plain local project state under <code>.coact</code>. Agents read and write through CoAct commands and hooks.</p>
+                  <p>Brief, tasks, messages, locks, presence, and logs are plain local project state under <code>.coact</code>. Agents read and write through CoAct commands and hooks.</p>
                 </details>
                 <details class="doc-card">
                   <summary>Version manager</summary>
@@ -714,36 +1242,65 @@ const indexHTML = `<!doctype html>
           </div>
         </section>
 
-        <section class="page-view" data-page="brief">
-          <section class="card span-12" id="brief-card">
-            <div class="section-head">
-              <div>
-                <div class="eyebrow">Context</div>
-                <h2>Project brief</h2>
+        <section class="page-view" data-page="work">
+          <div class="page-grid">
+            <section class="card span-7" id="brief-card">
+              <div class="section-head">
+                <div>
+                  <div class="eyebrow">Context</div>
+                  <h2>Brief</h2>
+                </div>
+                <span class="badge">shared</span>
               </div>
-              <span class="badge">human-controlled</span>
-            </div>
-            <div class="stack">
-              <textarea id="brief" placeholder="Goal, constraints, decisions, preferred agent split. Saved to .coact/brief.md."></textarea>
-              <div class="row wrap"><button onclick="saveBrief()">Save brief</button><span class="muted">Agents can read this shared context; they should not edit it directly.</span></div>
-            </div>
-          </section>
-        </section>
+              <div class="stack">
+                <textarea id="brief" placeholder="Goal, constraints, decisions, preferred agent split."></textarea>
+                <div class="row wrap"><button onclick="saveBrief()">Save brief</button><span class="muted">Saved to <code>.coact/brief.md</code>.</span></div>
+              </div>
+            </section>
 
-        <section class="page-view" data-page="tasks">
-          <section class="card span-12" id="tasks-card">
-            <div class="section-head">
-              <div>
-                <div class="eyebrow">Board</div>
-                <h2>Tasks</h2>
+            <section class="card span-5" id="routing-card">
+              <div class="section-head">
+                <div>
+                  <div class="eyebrow">Routing</div>
+                  <h2>Agents work in terminals</h2>
+                </div>
+                <span class="badge">native CLI</span>
               </div>
-              <span class="badge" id="taskCount">0 tasks</span>
-            </div>
-            <div class="stack">
-              <div class="row"><input id="taskTitle" placeholder="Add a concrete task for an agent" /><button onclick="addTask()">Add task</button></div>
-              <div id="tasks" class="task-list"></div>
-            </div>
-          </section>
+              <div class="stack">
+                <p class="muted">Talk to Claude, Codex, or Gemini inside their own terminals. CoAct keeps the project memory synced through the brief, task board, locks, and journal.</p>
+                <div id="workAgents" class="agent-list"></div>
+                <p class="hint">For docs and deeper design notes, use the GitHub README instead of this local screen.</p>
+              </div>
+            </section>
+
+            <section class="card span-12" id="terminals-card">
+              <div class="section-head">
+                <div>
+                  <div class="eyebrow">Agents</div>
+                  <h2>Agent coordination</h2>
+                </div>
+                <span class="badge" id="terminalCount">0 agents</span>
+              </div>
+              <div class="stack">
+                <div id="workTerminals" class="work-terminal-list"></div>
+                <p class="hint">Steer agents in their native terminals. Use CoAct for shared context, task assignment, inbox notes, locks, and audit history.</p>
+              </div>
+            </section>
+
+            <details class="card span-12 board-details" id="tasks-card" open>
+              <summary class="section-head board-summary">
+                <div>
+                  <div class="eyebrow">Board</div>
+                  <h2>Tasks</h2>
+                </div>
+                <div class="row wrap"><span class="badge" id="taskCount">0 tasks</span><span class="badge">collapse</span></div>
+              </summary>
+              <div class="stack board-body" id="taskBoard">
+                <div class="row"><input id="taskTitle" placeholder="Add a concrete task for an agent" /><select id="taskOwner"><option value="">Unassigned</option><option value="codex">Codex</option><option value="claude">Claude</option><option value="gemini">Gemini</option></select><button onclick="addTask()">Add task</button></div>
+                <div id="tasks" class="task-list"></div>
+              </div>
+            </details>
+          </div>
         </section>
 
         <section class="page-view" data-page="agents">
@@ -773,63 +1330,41 @@ const indexHTML = `<!doctype html>
             <section class="card span-12">
               <div class="section-head">
                 <div>
-                  <div class="eyebrow">Terminal</div>
-                  <h2>Embedded agent terminals</h2>
+                  <div class="eyebrow">Agent launchpad</div>
+                  <h2>Agent launchpad, shared project memory</h2>
                 </div>
-                <span class="badge warn">next layer</span>
+                <span class="badge warn">macOS beta</span>
               </div>
-              <div class="terminal-preview">Current release opens each agent in a native local terminal with CoAct already wired.
-
-Next layer:
-  • run Claude and Codex inside managed PTY sessions
-  • stream output into this page
-  • send keystrokes from the browser to each agent
-  • keep all commands allowlisted through CoAct adapters</div>
+              <div id="agentSessions" class="session-grid"></div>
+              <div class="sync-note">On macOS, CoAct can launch allowlisted agent CLIs in native Terminal sessions and record local transcripts under <code>.coact/terminal</code>. Other platforms should copy the generated command and run it manually. CoAct separately persists shared project memory under <code>.coact</code>: brief, board, inbox messages, locks, presence, and audit journal.</div>
             </section>
           </div>
         </section>
 
-        <section class="page-view" data-page="messages">
-          <section class="card span-12" id="messages-card">
-            <div class="section-head">
-              <div>
-                <div class="eyebrow">Inbox</div>
-                <h2>Messages</h2>
+        <section class="page-view" data-page="advanced">
+          <div class="page-grid">
+            <section class="card span-5" id="versions-card">
+              <div class="section-head">
+                <div>
+                  <div class="eyebrow">Release</div>
+                  <h2>Versions</h2>
+                </div>
+                <span class="badge warn">advanced</span>
               </div>
-              <span class="badge">journaled</span>
-            </div>
-            <div class="stack">
-              <div class="grid2"><input id="msgTo" placeholder="to: claude / codex / gemini" /><input id="msgFrom" value="human" /></div>
-              <textarea id="msgText" placeholder="Send instructions or handoff context to an agent"></textarea>
-              <button onclick="sendMessage()">Send message</button>
-            </div>
-          </section>
-        </section>
+              <div id="versions" class="version-list muted">Managed versions appear here after <code>coact update</code>.</div>
+            </section>
 
-        <section class="page-view" data-page="versions">
-          <section class="card span-12" id="versions-card">
-            <div class="section-head">
-              <div>
-                <div class="eyebrow">Release</div>
-                <h2>Versions</h2>
+            <section class="card span-7" id="log-card">
+              <div class="section-head">
+                <div>
+                  <div class="eyebrow">Audit</div>
+                  <h2>Activity log</h2>
+                </div>
+                <span class="badge" id="logCount">0 events</span>
               </div>
-              <span class="badge warn">experimental</span>
-            </div>
-            <div id="versions" class="version-list muted">Managed versions appear here after <code>coact update</code>.</div>
-          </section>
-        </section>
-
-        <section class="page-view" data-page="log">
-          <section class="card span-12" id="log-card">
-            <div class="section-head">
-              <div>
-                <div class="eyebrow">Audit</div>
-                <h2>Activity log</h2>
-              </div>
-              <span class="badge" id="logCount">0 events</span>
-            </div>
-            <div id="log" class="log muted">No events yet.</div>
-          </section>
+              <div id="log" class="log muted">No events yet.</div>
+            </section>
+          </div>
         </section>
       </main>
     </div>
@@ -840,7 +1375,14 @@ Next layer:
     const TOKEN = "__COACT_TOKEN__";
     let lastBrief = null;
     let toastTimer = null;
+    let launchCommands = [];
+    let lastAgents = [];
+    let terminalMirrors = [];
+    let fullTerminalMirrors = {};
+    let activeMirrorAgent = localStorage.getItem('coactActiveMirrorAgent') || 'codex';
+    let terminalFontSize = parseInt(localStorage.getItem('coactTerminalFontSize') || '13', 10);
     const DEFAULT_PAGE = "overview";
+    if (Number.isNaN(terminalFontSize)) terminalFontSize = 13;
 
     async function api(path, opts) {
       opts = opts || {};
@@ -852,9 +1394,147 @@ Next layer:
     }
     function esc(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function badge(text, type) { return '<span class="badge '+esc(type || '')+'">'+esc(text)+'</span>'; }
+    function providerSpec(id) {
+      const specs = {
+        codex: {id:'codex', label:'OpenAI / Codex', mark:'O', brand:'openai', binary:'codex'},
+        claude: {id:'claude', label:'Claude Code', mark:'C', brand:'claude', binary:'claude'},
+        gemini: {id:'gemini', label:'Gemini CLI', mark:'G', brand:'gemini', binary:'gemini'}
+      };
+      return specs[id] || {id:id, label:id, mark:(id || '?').slice(0, 1).toUpperCase(), brand:'generic', binary:id};
+    }
+    function commandFor(agent) {
+      return launchCommands.find(c => c.agent === agent) || null;
+    }
+    function agentFor(agents, id) {
+      return agents.find(a => a.id === id) || null;
+    }
+    function mirrorFor(agent) {
+      return terminalMirrors.find(m => m.agent === agent) || null;
+    }
+    function shortPath(path) {
+      const parts = String(path || '').split('/').filter(Boolean);
+      return parts.slice(-2).join('/') || path || '-';
+    }
+    function clamp(n, min, max) {
+      return Math.max(min, Math.min(max, n));
+    }
+    function setActiveMirrorAgent(agent) {
+      activeMirrorAgent = agent || 'codex';
+      localStorage.setItem('coactActiveMirrorAgent', activeMirrorAgent);
+      renderAgentSessions(lastAgents);
+    }
+    function setTerminalFontSize(size) {
+      terminalFontSize = clamp(size || 13, 10, 22);
+      localStorage.setItem('coactTerminalFontSize', String(terminalFontSize));
+      renderAgentSessions(lastAgents);
+    }
+    function ansiClasses(state) {
+      const classes = [];
+      if (state.bold) classes.push('ansi-bold');
+      if (state.dim) classes.push('ansi-dim');
+      if (state.italic) classes.push('ansi-italic');
+      if (state.underline) classes.push('ansi-underline');
+      if (state.inverse) classes.push('ansi-inverse');
+      if (state.fg) classes.push('ansi-fg-' + state.fg);
+      if (state.bg) classes.push('ansi-bg-' + state.bg);
+      return classes.join(' ');
+    }
+    function resetAnsiState(state) {
+      state.bold = false;
+      state.dim = false;
+      state.italic = false;
+      state.underline = false;
+      state.inverse = false;
+      state.fg = '';
+      state.bg = '';
+    }
+    function applyAnsiCodes(state, codes) {
+      if (!codes.length) codes = [0];
+      for (const code of codes) {
+        if (code === 0) resetAnsiState(state);
+        else if (code === 1) state.bold = true;
+        else if (code === 2) state.dim = true;
+        else if (code === 3) state.italic = true;
+        else if (code === 4) state.underline = true;
+        else if (code === 7) state.inverse = true;
+        else if (code === 22) { state.bold = false; state.dim = false; }
+        else if (code === 23) state.italic = false;
+        else if (code === 24) state.underline = false;
+        else if (code === 27) state.inverse = false;
+        else if (code === 39) state.fg = '';
+        else if (code === 49) state.bg = '';
+        else if ((code >= 30 && code <= 37) || (code >= 90 && code <= 97)) state.fg = String(code);
+        else if ((code >= 40 && code <= 47) || (code >= 100 && code <= 107)) state.bg = String(code);
+      }
+    }
+    function renderAnsi(text) {
+      const state = {};
+      resetAnsiState(state);
+      let out = '';
+      let chunk = '';
+      const flush = () => {
+        if (!chunk) return;
+        const classes = ansiClasses(state);
+        out += classes ? '<span class="' + classes + '">' + esc(chunk) + '</span>' : esc(chunk);
+        chunk = '';
+      };
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (ch !== '\x1b') {
+          if (ch === '\r') continue;
+          if (ch === '\b') {
+            chunk = chunk.slice(0, -1);
+            continue;
+          }
+          if (ch.charCodeAt(0) < 32 && ch !== '\n' && ch !== '\t') continue;
+          chunk += ch;
+          continue;
+        }
+        const next = text[i + 1];
+        if (next === ']') {
+          flush();
+          let j = i + 2;
+          while (j < text.length && text[j] !== '\x07' && !(text[j] === '\x1b' && text[j + 1] === '\\')) j++;
+          i = j < text.length && text[j] === '\x1b' ? j + 1 : j;
+          continue;
+        }
+        if (next === 'P' || next === 'X' || next === '^' || next === '_') {
+          flush();
+          let j = i + 2;
+          while (j < text.length && !(text[j] === '\x1b' && text[j + 1] === '\\')) j++;
+          i = j < text.length ? j + 1 : j;
+          continue;
+        }
+        if (next !== '[') {
+          flush();
+          i += 1;
+          continue;
+        }
+        let j = i + 2;
+        while (j < text.length && (text.charCodeAt(j) < 0x40 || text.charCodeAt(j) > 0x7e)) j++;
+        if (j >= text.length) break;
+        const final = text[j];
+        const body = text.slice(i + 2, j);
+        flush();
+        if (final === 'm') {
+          const codes = body.split(';').filter(Boolean).map(n => parseInt(n, 10)).filter(n => !Number.isNaN(n));
+          applyAnsiCodes(state, codes);
+        }
+        i = j;
+      }
+      flush();
+      return out;
+    }
+    function scrollMirrorsToBottom() {
+      document.querySelectorAll('.mirror-output').forEach(el => {
+        if (el.dataset.follow === 'true') el.scrollTop = el.scrollHeight;
+      });
+    }
     function pageFromLocation() {
       const page = (window.location.hash || '').replace(/^#/, '');
-      return document.querySelector('[data-page="'+page+'"]') ? page : DEFAULT_PAGE;
+      const aliases = {brief:'work', tasks:'work', messages:'work', agents:'work', guide:'overview', advanced:'overview', versions:'overview', log:'overview'};
+      const resolved = aliases[page] || page;
+      return document.querySelector('[data-page="'+resolved+'"]') ? resolved : DEFAULT_PAGE;
     }
     function setPage(page, updateURL) {
       if (!document.querySelector('[data-page="'+page+'"]')) page = DEFAULT_PAGE;
@@ -903,29 +1583,29 @@ Next layer:
       if (!s.initialized) {
         step = 'Step 1 of 4';
         title = 'Initialize this repository';
-        desc = 'Wire CoAct into this repo — it adds the enforcement hook, agent contracts, and the .coact workspace. Nothing else is touched, and coact deinit removes it all.';
+        desc = 'Create the local CoAct bridge for this repo — agent contracts, coordination files, and the .coact project memory layer. Nothing else is touched, and coact deinit removes it all.';
         action = '<button class="primary" onclick="initProject()">Initialize repo</button>';
       } else if (!hasBrief) {
         step = 'Step 2 of 4';
         title = 'Write your project brief';
-        desc = 'Give every agent the same context — the goal, the constraints, and who does what. It saves to .coact/brief.md for agents to read.';
-        action = '<button class="primary" data-goto="brief">Write brief</button>';
+        desc = 'Seed the shared project memory with the goal, constraints, and who does what. It saves to .coact/brief.md for agents to read.';
+        action = '<button class="primary" data-goto="work">Write brief</button>';
       } else if (tasks.length === 0) {
         step = 'Step 3 of 4';
         title = 'Add your first task';
         desc = 'Break the work into concrete tasks. Agents claim tasks from the board, so two of them never grab the same thing.';
-        action = '<button class="primary" data-goto="tasks">Add a task</button>';
+        action = '<button class="primary" data-goto="work">Add a task</button>';
       } else if (live === 0) {
         step = 'Step 4 of 4';
         title = 'Start an agent';
-        desc = "Launch Claude or Codex below. Each opens in its own terminal, already wired into CoAct — locks and the board keep them out of each other's way.";
-        action = '<button class="primary" data-goto="agents">View agents</button>';
+        desc = "Launch an agent below. This connects it to the same project bridge; macOS can open a native terminal directly.";
+        action = '<button class="primary" data-goto="overview">Start agent</button>';
       } else {
         done = true;
         step = "You're set";
         title = live + ' agent' + (live > 1 ? 's' : '') + ' working now';
-        desc = 'Agents are live and coordinating through locks and the shared board. Track progress in Tasks and the Audit log; send guidance from Messages.';
-        action = '<button data-goto="tasks">Open tasks</button>';
+        desc = 'Agents are live and coordinating through the shared project memory, locks, and board. Track progress in Work.';
+        action = '<button data-goto="work">Open work</button>';
       }
       el.className = 'next-step' + (done ? ' done' : '');
       el.innerHTML = '<div class="ns-body"><div class="ns-step">' + esc(step) + '</div><h2>' + esc(title) + '</h2><p>' + esc(desc) + '</p></div><div class="ns-action">' + action + '</div>';
@@ -950,6 +1630,7 @@ Next layer:
         const agents = s.agents || [];
         const locks = s.locks || [];
         const log = s.log || [];
+        lastAgents = agents;
         const stats = taskStats(tasks);
         const liveAgents = agents.filter(a => a.live).length;
         const wsEl = document.getElementById('workspace');
@@ -979,24 +1660,163 @@ Next layer:
         renderLog(log);
         renderVersions(s.versions || [], s.manifest || null);
         renderGuide(s.versions || [], s.manifest || null);
+        renderProjects(s.projects || [], s.workspace || '');
         renderNextStep(s, tasks, agents);
         renderChecklist(s, tasks, agents);
+        loadTerminalMirrors().catch(() => {});
       } catch (e) {
         document.getElementById('initState').className = 'badge bad';
         document.getElementById('initState').textContent = e.message;
       }
     }
     function renderTasks(tasks) {
-      document.getElementById('taskCount').textContent = tasks.length + (tasks.length === 1 ? ' task' : ' tasks');
+      const done = tasks.filter(t => t.state === 'done').length;
+      document.getElementById('taskCount').textContent = tasks.length + (tasks.length === 1 ? ' task' : ' tasks') + (done ? ' · ' + done + ' done' : '');
       document.getElementById('tasks').innerHTML = tasks.map(t => {
         const stateType = t.state === 'done' ? 'ok' : (t.state === 'doing' ? 'warn' : '');
-        return '<div class="task-card"><div><code>'+esc(t.id)+'</code></div><div><div class="task-title">'+esc(t.title)+'</div><div class="task-meta">'+badge(t.state, stateType)+badge(t.owner || 'unassigned')+'</div></div><div class="row wrap"><button class="small ghost" onclick="claimTask(\''+esc(t.id)+'\')">Claim</button><button class="small" onclick="doneTask(\''+esc(t.id)+'\')">Done</button></div></div>';
+        const line = '<span class="task-row-id">'+esc(t.id)+'</span><span class="task-title">'+esc(t.title)+'</span><span class="task-row-tags">'+badge(t.state, stateType)+badge(t.owner || 'unassigned')+'</span>';
+        if (t.state === 'done') {
+          return '<div class="task-row is-done"><div class="task-row-line">'+line+'</div></div>';
+        }
+        return '<details class="task-row"><summary>'+line+'</summary><div class="task-row-actions"><button class="small ghost" onclick="claimTask(\''+esc(t.id)+'\')">Claim</button><button class="small" onclick="doneTask(\''+esc(t.id)+'\')">Done</button></div></details>';
       }).join('') || '<div class="empty">No tasks yet. Add one above, then assign it to an agent.</div>';
     }
     function renderAgents(agents) {
       const live = agents.filter(a => a.live).length;
       document.getElementById('agentCount').textContent = live + ' live';
       document.getElementById('agents').innerHTML = agents.map(a => '<div class="agent-card"><div><div class="agent-name"><span class="badge '+(a.live?'ok':'bad')+'"><span class="dot"></span>'+(a.live?'live':'dead')+'</span><code>'+esc(a.id)+'</code></div><div class="agent-sub">'+esc(a.status || 'idle')+' · '+esc(a.enforcement || 'policy unknown')+'</div></div><div class="muted">'+esc(a.current_task || '-')+'<br>'+esc(a.beat || '-')+'</div></div>').join('') || '<div class="empty">No agents configured yet.</div>';
+      const workAgents = document.getElementById('workAgents');
+      if (workAgents) {
+        workAgents.innerHTML = agents.map(a => '<div class="agent-card"><div><div class="agent-name"><span class="badge '+(a.live?'ok':'bad')+'">'+(a.live?'live':'offline')+'</span><code>'+esc(a.id)+'</code></div><div class="agent-sub">'+esc(a.status || 'idle')+'</div></div><div class="muted">'+esc(a.current_task || 'no task')+'</div></div>').join('') || '<div class="empty">No agents configured yet.</div>';
+      }
+      renderWorkTerminals(agents);
+    }
+    function renderWorkTerminals(agents) {
+      const el = document.getElementById('workTerminals');
+      if (!el) return;
+      const focused = document.activeElement;
+      const draft = focused && focused.id && focused.id.startsWith('agentInstruction-')
+        ? {id: focused.id, value: focused.value, start: focused.selectionStart, end: focused.selectionEnd}
+        : null;
+      const ids = ['codex', 'claude', 'gemini'];
+      const items = ids.map(id => {
+        const spec = providerSpec(id);
+        const agent = agentFor(agents, id) || {id:id, adapter:spec.binary, live:false};
+        const mirror = mirrorFor(id);
+        return {id, spec, agent, mirror};
+      }).filter(item => item.agent.live || (item.mirror && item.mirror.exists));
+      const count = document.getElementById('terminalCount');
+      if (count) count.textContent = items.length + (items.length === 1 ? ' agent' : ' agents');
+      if (!items.length) {
+        el.innerHTML = '<div class="empty">No agent sessions found yet. Start agents from Setup or run <code>coact claude</code>, <code>coact codex</code>, or <code>coact gemini</code> in native terminals.</div>';
+        return;
+      }
+      if (!items.some(item => item.id === activeMirrorAgent)) {
+        activeMirrorAgent = items[0].id;
+        localStorage.setItem('coactActiveMirrorAgent', activeMirrorAgent);
+      }
+      const tabs = items.map(item => {
+        const tabLabel = item.id === 'codex' ? 'Codex' : (item.id === 'claude' ? 'Claude' : (item.id === 'gemini' ? 'Gemini' : item.spec.label));
+        return '<button class="work-terminal-tab '+(item.id === activeMirrorAgent ? 'active' : '')+'" type="button" data-agent-focus="'+esc(item.id)+'"><span class="provider-mark">'+esc(item.spec.mark)+'</span><strong>'+esc(tabLabel)+'</strong>'+badge(item.agent.live ? 'live' : 'recorded', item.agent.live ? 'ok' : '')+'</button>';
+      }).join('');
+      const selected = items.find(item => item.id === activeMirrorAgent) || items[0];
+      const id = selected.id;
+      const spec = selected.spec;
+      const agent = selected.agent;
+      const mirror = selected.mirror;
+      const fullMirror = fullTerminalMirrors[id];
+      const hasFull = fullMirror && fullMirror.exists;
+      const cmd = commandFor(id);
+      const status = agent.status || (agent.live ? 'working' : 'offline');
+      const task = agent.current_task || 'no task';
+      const mirrorState = mirror && mirror.exists
+        ? ((hasFull ? 'full · ' : 'transcript · ') + mirror.size + ' bytes')
+        : 'no transcript yet';
+      const updatedSource = hasFull ? fullMirror : mirror;
+      const updated = updatedSource && updatedSource.updated_at ? updatedSource.updated_at.replace('T', ' ').replace('Z', ' UTC') : '-';
+      const transcript = hasFull && fullMirror.tail ? renderAnsi(fullMirror.tail) : '';
+      const transcriptBlock = hasFull
+        ? '<details open><summary>Show full transcript</summary><pre class="work-terminal-output">'+transcript+'</pre></details>'
+        : '<div class="hint" style="margin-top:12px">Full transcript is loaded only when requested, so polling stays light.</div>';
+      const fullButton = mirror && mirror.exists
+        ? (hasFull ? '<span class="badge ok">full loaded</span>' : '<button class="small" data-full-transcript="'+esc(id)+'">Load full transcript</button>')
+        : '';
+      const copyButton = cmd ? '<button class="small ghost" data-copy="'+esc(cmd.command)+'">Copy command</button>' : '';
+      const composer = '<div class="agent-command-box"><textarea id="agentInstruction-'+esc(id)+'" placeholder="Send an inbox note to '+esc(spec.label)+'. This is async context, not terminal input."></textarea><div class="row wrap"><button class="small primary" data-send-inbox-note="'+esc(id)+'">Send inbox note</button><span class="hint">Writes to <code>.coact/inbox/'+esc(id)+'.md</code>; the agent reads it on its next turn.</span></div></div>';
+      const panel = '<div class="work-terminal-card provider-'+esc(spec.brand)+' '+(agent.live?'is-live':'')+'"><div class="work-terminal-head"><div class="work-terminal-title"><div class="provider-mark">'+esc(spec.mark)+'</div><div><strong>'+esc(spec.label)+'</strong><span>'+esc(status)+' · '+esc(task)+'</span></div></div>'+badge(agent.live ? 'live' : 'recorded', agent.live ? 'ok' : '')+'</div><div class="work-terminal-meta">'+badge(mirrorState)+badge('updated '+updated)+'</div><div class="work-terminal-actions">'+fullButton+copyButton+'</div>'+composer+transcriptBlock+'</div>';
+      el.innerHTML = '<div class="work-terminal-tabs">'+tabs+'</div>'+panel;
+      if (draft) {
+        const restored = document.getElementById(draft.id);
+        if (restored) {
+          restored.value = draft.value;
+          restored.focus();
+          try { restored.setSelectionRange(draft.start, draft.end); } catch (e) {}
+        }
+      }
+    }
+    function renderProjects(projects, workspace) {
+      const select = document.getElementById('projectSelect');
+      if (!select) return;
+      const active = projects.find(p => p.active) || projects.find(p => p.root === workspace) || {root:workspace, name:shortPath(workspace), initialized:true};
+      const seen = new Set();
+      const opts = [];
+      for (const p of projects.concat([active])) {
+        if (!p || !p.root || seen.has(p.root)) continue;
+        seen.add(p.root);
+        opts.push('<option value="'+esc(p.root)+'" '+(p.root === active.root ? 'selected' : '')+'>'+esc((p.name || shortPath(p.root)) + (p.initialized ? '' : ' · not initialized'))+'</option>');
+      }
+      select.innerHTML = opts.join('');
+      select.title = active.root || '';
+    }
+    function renderAgentSessions(agents) {
+      const el = document.getElementById('agentSessions');
+      if (!el) return;
+      const ids = ['codex', 'claude', 'gemini'];
+      if (!ids.includes(activeMirrorAgent)) activeMirrorAgent = ids[0];
+      const switches = ids.map(id => {
+        const spec = providerSpec(id);
+        const agent = agentFor(agents, id) || {id:id, adapter:spec.binary, live:false};
+        const cmd = commandFor(id);
+        const installed = cmd ? cmd.installed : false;
+        const mirror = mirrorFor(id);
+        const mirrorState = mirror && mirror.exists
+          ? ((mirror.truncated ? 'tail' : 'full') + ' · ' + mirror.size + ' bytes')
+          : 'no transcript';
+        const status = agent.status || (agent.live ? 'working' : 'offline');
+        return '<button class="agent-switch '+(id === activeMirrorAgent ? 'active' : '')+'" type="button" data-agent-focus="'+esc(id)+'"><div class="agent-switch-top"><div class="agent-switch-name"><span class="provider-mark">'+esc(spec.mark)+'</span><span>'+esc(spec.label)+'</span></div>'+badge(agent.live ? 'live' : 'offline', agent.live ? 'ok' : 'bad')+'</div><div class="agent-switch-meta">'+badge(installed ? 'installed' : 'missing', installed ? 'ok' : 'bad')+badge(mirrorState)+'</div><div class="muted">'+esc(status)+' · '+esc(agent.current_task || 'no task')+'</div></button>';
+      }).join('');
+
+      const id = activeMirrorAgent;
+      const spec = providerSpec(id);
+      const agent = agentFor(agents, id) || {id:id, adapter:spec.binary, live:false};
+      const cmd = commandFor(id);
+      const canLaunch = cmd && cmd.installed && cmd.terminal_supported;
+      const installed = cmd ? cmd.installed : false;
+      const mirror = mirrorFor(id);
+      const mirrorText = mirror && mirror.tail
+        ? mirror.tail
+        : 'No terminal transcript yet. Start this agent through CoAct to mirror its raw session here.';
+      const mirrorHTML = mirror && mirror.tail ? renderAnsi(mirrorText) : esc(mirrorText);
+      const mirrorClass = mirror && mirror.tail ? 'mirror-output' : 'mirror-output is-empty';
+      const mirrorState = mirror && mirror.exists
+        ? ((mirror.truncated ? 'tail · ' : 'full · ') + mirror.size + ' bytes')
+        : 'not recording yet';
+      const mirrorTime = mirror && mirror.updated_at ? mirror.updated_at.replace('T', ' ').replace('Z', ' UTC') : '-';
+      const model = agent.model || 'not reported';
+      const status = agent.status || (agent.live ? 'working' : 'offline');
+      const task = agent.current_task || 'no active task';
+      const startTitle = canLaunch
+        ? 'Open ' + spec.label + ' in its native terminal wired into CoAct'
+        : (installed ? 'One-click launch is macOS-only right now' : 'Install ' + spec.binary + ' and add it to PATH');
+      const startButton = canLaunch
+        ? '<button class="small primary" data-launch="'+esc(id)+'" title="'+esc(startTitle)+'">Start</button>'
+        : '<button class="small" title="'+esc(startTitle)+'" disabled>Start</button>';
+      const copyButton = cmd
+        ? '<button class="small ghost" data-copy="'+esc(cmd.command)+'">Copy</button>'
+        : '';
+      const pane = '<div class="terminal-pane provider-'+esc(spec.brand)+' '+(agent.live?'is-live':'is-offline')+'"><div class="terminal-toolbar"><div class="terminal-title"><div class="provider-mark">'+esc(spec.mark)+'</div><div class="terminal-title-copy"><strong>'+esc(spec.label)+'</strong><span>'+esc(agent.adapter || spec.binary)+' · '+esc(status)+' · '+esc(cmd ? cmd.command : 'coact '+id)+'</span></div></div><div class="terminal-controls"><span class="badge '+(agent.live?'ok':'bad')+'">'+(agent.live?'live':'offline')+'</span><span class="badge '+(installed?'ok':'bad')+'">'+(installed?'installed':'missing')+'</span><div class="font-controls" aria-label="Terminal font size"><button type="button" data-font-delta="-1">A-</button><button type="button" data-font-reset>Reset</button><button type="button" data-font-delta="1">A+</button></div>'+startButton+copyButton+'</div></div><div class="terminal-meta-grid"><div class="terminal-meta"><span>Model</span><strong>'+esc(model)+'</strong></div><div class="terminal-meta"><span>Task</span><strong>'+esc(task)+'</strong></div><div class="terminal-meta"><span>Mirror</span><strong>'+esc(mirrorState)+'</strong></div><div class="terminal-meta"><span>Updated</span><strong>'+esc(mirrorTime)+'</strong></div></div><div class="mirror-meta"><span>Raw terminal projection · output only</span><span>'+esc(terminalFontSize)+'px</span></div><pre class="'+mirrorClass+'" data-follow="true" style="font-size:'+esc(String(terminalFontSize))+'px">'+mirrorHTML+'</pre></div>';
+      el.innerHTML = '<div class="terminal-hub"><div class="agent-switcher">'+switches+'</div>'+pane+'</div>';
+      scrollMirrorsToBottom();
     }
     function renderLocks(locks) {
       document.getElementById('lockCount').textContent = locks.length + ' active';
@@ -1024,13 +1844,14 @@ Next layer:
     }
     async function initProject(){ mutate('Repository initialized', () => api('/api/init',{method:'POST', body:'{}'})); }
     async function saveBrief(){ mutate('Brief saved', () => api('/api/brief',{method:'POST', body:JSON.stringify({text:document.getElementById('brief').value})})); }
-    async function addTask(){ const title=document.getElementById('taskTitle').value; if(!title.trim()) return; await mutate('Task added', () => api('/api/tasks',{method:'POST', body:JSON.stringify({title})})); document.getElementById('taskTitle').value=''; }
+    async function addTask(){ const title=document.getElementById('taskTitle').value; const owner=document.getElementById('taskOwner').value; if(!title.trim()) return; await mutate(owner ? 'Task scheduled' : 'Task added', () => api('/api/tasks',{method:'POST', body:JSON.stringify({title, owner})})); document.getElementById('taskTitle').value=''; }
     async function claimTask(id){ const owner=prompt('Owner agent?', 'claude'); if(!owner) return; mutate('Task claimed', () => api('/api/tasks/'+id+'/claim',{method:'POST', body:JSON.stringify({owner})})); }
     async function doneTask(id){ const owner=prompt('Owner agent?', 'human'); if(!owner) return; mutate('Task marked done', () => api('/api/tasks/'+id+'/done',{method:'POST', body:JSON.stringify({owner})})); }
     async function sendMessage(){ const text=document.getElementById('msgText').value; if(!text.trim()) return; await mutate('Message sent', () => api('/api/messages',{method:'POST', body:JSON.stringify({from:document.getElementById('msgFrom').value,to:document.getElementById('msgTo').value,text})})); document.getElementById('msgText').value=''; }
     async function loadLaunch(){
       const d = await api('/api/launch-commands');
-      document.getElementById('launch').innerHTML = d.commands.map(c => {
+      launchCommands = d.commands || [];
+      document.getElementById('launch').innerHTML = launchCommands.map(c => {
         const canLaunch = c.installed && c.terminal_supported;
         const status = c.installed ? badge('installed','ok') : badge('not on PATH','bad');
         const friendly = 'coact ' + c.agent;
@@ -1043,6 +1864,47 @@ Next layer:
         return '<div class="command"><div class="cmd-head"><strong>'+esc(c.agent)+'</strong>'+status+'</div><code title="'+esc(c.command)+'">'+esc(friendly)+'</code><div class="row wrap">'+startBtn+'<button class="small ghost" data-copy="'+esc(c.command)+'">Copy command</button></div></div>';
       }).join('');
     }
+    async function loadTerminalMirrors(){
+      try {
+        const d = await api('/api/terminal-mirror');
+        terminalMirrors = d.mirrors || [];
+        renderWorkTerminals(lastAgents);
+        renderAgentSessions(lastAgents);
+      } catch (e) {
+        terminalMirrors = [];
+        renderWorkTerminals(lastAgents);
+      }
+    }
+    async function loadFullTranscript(agent){
+      const d = await api('/api/terminal-mirror?agent=' + encodeURIComponent(agent) + '&full=1');
+      const mirror = (d.mirrors || [])[0];
+      if (!mirror || !mirror.exists) throw new Error('No transcript found for ' + agent);
+      fullTerminalMirrors[agent] = mirror;
+      renderWorkTerminals(lastAgents);
+    }
+    async function sendInboxNote(agent){
+      const input = document.getElementById('agentInstruction-' + agent);
+      const text = input ? input.value.trim() : '';
+      if (!text) {
+        showToast('Inbox note is empty');
+        return;
+      }
+      await mutate('Inbox note sent to '+agent, () => api('/api/messages', {method:'POST', body:JSON.stringify({from:'human', to:agent, text})}));
+      if (input) input.value = '';
+    }
+    async function switchProject(root){
+      if (!root) return;
+      await mutate('Project switched', () => api('/api/projects/active',{method:'POST', body:JSON.stringify({root})}));
+      fullTerminalMirrors = {};
+      loadLaunch().catch(e => showToast(e.message));
+      loadTerminalMirrors().catch(() => {});
+    }
+    async function addProject(){
+      const root = prompt('Project folder path?', document.getElementById('workspace').title || '');
+      if (!root) return;
+      await mutate('Project added', () => api('/api/projects',{method:'POST', body:JSON.stringify({root})}));
+      loadLaunch().catch(e => showToast(e.message));
+    }
     document.addEventListener('click', async ev => {
       const nav = ev.target.closest('[data-page-target]');
       if (nav) {
@@ -1054,10 +1916,48 @@ Next layer:
         setPage(goto.getAttribute('data-goto'), true);
         return;
       }
+      const addProjectButton = ev.target.closest('[data-add-project]');
+      if (addProjectButton) {
+        await addProject();
+        return;
+      }
+      const focus = ev.target.closest('[data-agent-focus]');
+      if (focus) {
+        setActiveMirrorAgent(focus.getAttribute('data-agent-focus'));
+        return;
+      }
+      const fontDelta = ev.target.closest('[data-font-delta]');
+      if (fontDelta) {
+        setTerminalFontSize(terminalFontSize + parseInt(fontDelta.getAttribute('data-font-delta'), 10));
+        return;
+      }
+      const fontReset = ev.target.closest('[data-font-reset]');
+      if (fontReset) {
+        setTerminalFontSize(13);
+        return;
+      }
+      const fullTranscript = ev.target.closest('[data-full-transcript]');
+      if (fullTranscript) {
+        const agent = fullTranscript.getAttribute('data-full-transcript');
+        try {
+          showToast('Loading full transcript…');
+          await loadFullTranscript(agent);
+          showToast('Full transcript loaded');
+        } catch (e) {
+          showToast(e.message);
+        }
+        return;
+      }
+      const sendInboxNoteButton = ev.target.closest('[data-send-inbox-note]');
+      if (sendInboxNoteButton) {
+        await sendInboxNote(sendInboxNoteButton.getAttribute('data-send-inbox-note'));
+        return;
+      }
       const launch = ev.target.closest('[data-launch]');
       if (launch) {
         const agent = launch.getAttribute('data-launch');
         await mutate('Opening '+agent+' in Terminal', () => api('/api/agents/'+agent+'/launch', {method:'POST', body:'{}'}));
+        loadTerminalMirrors().catch(() => {});
         return;
       }
       const switchVersion = ev.target.closest('[data-switch-version]');
@@ -1076,9 +1976,14 @@ Next layer:
         showToast('Copy failed');
       }
     });
+    document.addEventListener('change', ev => {
+      const projectSelect = ev.target.closest('#projectSelect');
+      if (projectSelect) switchProject(projectSelect.value);
+    });
     window.addEventListener('popstate', () => setPage(pageFromLocation(), false));
     setPage(pageFromLocation(), false);
     loadLaunch().catch(e => showToast(e.message));
+    loadTerminalMirrors().catch(() => {});
     refresh();
     setInterval(refresh, 1500);
   </script>

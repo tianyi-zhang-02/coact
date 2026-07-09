@@ -125,3 +125,25 @@ func TestSwitchOnlyChangesManagedShim(t *testing.T) {
 		t.Fatalf("shim target mismatch: got %q want %q", got, want)
 	}
 }
+
+func TestValidateVersionRejectsUnsafeNames(t *testing.T) {
+	for _, version := range []string{"", " v1.0.0", "v1.0.0 ", "../v1", `v1\bad`, "v1..2", "v1;touch-x"} {
+		if err := validateVersion(version); err == nil {
+			t.Fatalf("validateVersion(%q) should reject unsafe name", version)
+		}
+	}
+	for _, version := range []string{"v1.0.0", "v1.0.0-rc1", "v1_0_0"} {
+		if err := validateVersion(version); err != nil {
+			t.Fatalf("validateVersion(%q) should allow safe name: %v", version, err)
+		}
+	}
+}
+
+func TestDownloadToTempRejectsNonHTTPS(t *testing.T) {
+	if _, err := downloadToTemp(nil, "http://example.invalid/coact.tar.gz", "coact.tar.gz"); err == nil {
+		t.Fatal("downloadToTemp should reject non-HTTPS release URLs")
+	}
+	if _, err := getBytes(nil, "file:///tmp/coact_manifest.json"); err == nil {
+		t.Fatal("getBytes should reject non-HTTPS release URLs")
+	}
+}

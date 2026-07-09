@@ -11,17 +11,12 @@ import (
 // Run dispatches a subcommand and returns a process exit code.
 func Run(args []string) int {
 	if len(args) == 0 {
-		// Bare `coact` opens the control center only in an interactive terminal.
-		// In a pipe, script, or CI, stdout is not a TTY, so it prints usage and
-		// exits instead of hanging on a blocking server. `coact ui` always
-		// launches regardless of TTY.
-		if isInteractive() {
-			return cmdUI(nil)
-		}
-		printUsage()
-		return 1
+		return cmdHome()
 	}
 	cmd, rest := args[0], args[1:]
+	if strings.HasPrefix(cmd, "@") && len(cmd) > 1 {
+		return cmdMention(cmd[1:], rest)
+	}
 	switch cmd {
 	case "ui":
 		return cmdUI(rest)
@@ -49,6 +44,8 @@ func Run(args []string) int {
 		return cmdInbox(rest)
 	case "handoff":
 		return cmdHandoff(rest)
+	case "plan":
+		return cmdPlan(rest)
 	case "channel":
 		return cmdChannel(rest)
 	case "bridge":
@@ -148,13 +145,12 @@ func sanitizeAgent(id string) string {
 }
 
 func printUsage() {
-	fmt.Print(`coact — govern two coding agents in one repository.
+	fmt.Print(`coact — terminal-native coordination for multiple coding agents.
 
 Usage:
   coact [command] [flags]
 
 Commands:
-  ui               Open the local CoAct control center (--addr, --port, --no-open, --lang)
   init             Scaffold .coact/ and wire the agents in this repository
   doctor           Check the setup and self-test enforcement (no agent needed)
   deinit           Remove coact's wiring (--purge also deletes .coact/)
@@ -170,6 +166,9 @@ Commands:
   board            List tasks on the shared board
   claim <id>       Claim a task from the board
   done <id>        Mark a claimed task done
+  @agent <text>    Send an inbox message, e.g. coact @claude "please review"
+  @all <text>      Broadcast an inbox message to all built-in agents
+  plan "<brief>"   Start a planning phase under .coact/runs/<run>/
   msg <to> <text>  Send a message to another agent
   inbox            Read your messages from other agents
   handoff <to>     Hand your tasks + context to another agent
@@ -180,6 +179,7 @@ Commands:
   log              Show recent journal events (oversight view)
   policy           Show or check write policy (check <path> | show)
   hook claude      PreToolUse gate for Claude Code (wired by init)
+  ui               Open the optional local control center (--addr, --port, --no-open, --lang)
   versions         List locally managed coact versions (experimental)
   update           Download a release into ~/.coact (experimental; checksum-verified, unsigned)
   switch <version> Switch the ~/.coact/coact shim to a managed version (experimental)
@@ -190,11 +190,12 @@ Common flags:
   --agent <id>     Participant id (default: $COACT_AGENT, else "human")
 
 Examples:
-  coact                  # open the local UI
-  coact ui --no-open --port 7331
+  coact                  # show the terminal-native workspace summary
   coact init
   export COACT_AGENT=claude
   coact sidecar &          # keep this session live
+  coact @codex "please review my proposal"
+  coact plan --with codex,claude --distributor codex "Build the auth module"
   coact task add "Add rate limiting"
   coact claim T-001
   coact lock src/api

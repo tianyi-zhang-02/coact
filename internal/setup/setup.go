@@ -43,6 +43,7 @@ func Initialize(root, agent string) (*Result, error) {
 	p := &project.Project{Root: root, CheckoutRoot: root}
 	for _, d := range []string{
 		p.CoactDir(), p.LocksDir(), p.SessionDir(), p.InboxDir(), p.JournalDir(),
+		p.MemoryDir(), p.RunsDir(),
 	} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return nil, fmt.Errorf("creating %s: %w", d, err)
@@ -64,8 +65,27 @@ func Initialize(root, agent string) (*Result, error) {
 		}
 		note(rel(root, p.BoardPath()))
 	}
+	if !exists(p.TeamPath()) {
+		if err := os.WriteFile(p.TeamPath(), []byte(teamTemplate), 0o644); err != nil {
+			return nil, fmt.Errorf("writing team: %w", err)
+		}
+		note(rel(root, p.TeamPath()))
+	}
+	memoryPath := filepath.Join(p.MemoryDir(), "project.md")
+	if !exists(memoryPath) {
+		if err := os.WriteFile(memoryPath, []byte(memoryTemplate), 0o644); err != nil {
+			return nil, fmt.Errorf("writing project memory: %w", err)
+		}
+		note(rel(root, memoryPath))
+	}
 
 	cfg, _ := config.Load(p.ConfigPath())
+	if migrateProtectedPaths(cfg) {
+		if err := cfg.Save(p.ConfigPath()); err != nil {
+			return nil, fmt.Errorf("updating config policy: %w", err)
+		}
+		note(rel(root, p.ConfigPath()) + " (policy migration)")
+	}
 	for _, ac := range cfg.Agents {
 		ad, ok := adapter.Get(ac.ID)
 		if !ok {
@@ -92,6 +112,14 @@ func Initialize(root, agent string) (*Result, error) {
 	ensureGitignore(root)
 	_ = journal.Append(p.JournalDir(), agent, "session.start", map[string]string{"action": "init"})
 	return res, nil
+}
+
+func migrateProtectedPaths(cfg *config.Config) bool {
+	if cfg == nil || len(cfg.Policy.ProtectedPaths) != 1 || cfg.Policy.ProtectedPaths[0] != ".coact/**" {
+		return false
+	}
+	cfg.Policy.ProtectedPaths = config.Default().Policy.ProtectedPaths
+	return true
 }
 
 func exists(path string) bool {
@@ -238,7 +266,7 @@ func coactBinary() string {
 func ensureGitignore(root string) {
 	path := filepath.Join(root, ".gitignore")
 	needed := []string{
-		".coact/locks/", ".coact/session/", ".coact/journal/", ".coact/inbox/",
+		".coact/locks/", ".coact/session/", ".coact/journal/", ".coact/inbox/", ".coact/terminal/", ".coact/runs/", ".coact/memory/",
 	}
 	var content string
 	if data, err := os.ReadFile(path); err == nil {
@@ -246,7 +274,7 @@ func ensureGitignore(root string) {
 	}
 	var add []string
 	for _, n := range needed {
-		if !strings.Contains(content, n) {
+		if !gitignoreCovers(content, n) {
 			add = append(add, n)
 		}
 	}
@@ -267,6 +295,22 @@ func ensureGitignore(root string) {
 	}
 }
 
+func gitignoreCovers(content, pattern string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if line == pattern || line == "/"+pattern {
+			return true
+		}
+		if line == ".coact/" || line == "/.coact/" {
+			return strings.HasPrefix(pattern, ".coact/")
+		}
+	}
+	return false
+}
+
 const boardTemplate = `# Task board
 
 Tasks below carry machine-readable metadata in an HTML comment. The checkbox
@@ -277,4 +321,42 @@ mirrors state for humans: [ ] todo, [~] doing, [x] done, [!] blocked.
 - [ ] Example: describe a task here <!-- coact: id=T-001 state=todo owner= -->
 
 ## Done
+`
+
+const teamTemplate = `# CoAct team policy
+
+This file defines how coding agents coordinate in this repository. Agents should
+read it at the start of every session, before planning, and before claiming work.
+
+## Roles
+
+- final_task_distributor: human
+- planning_agents: codex, claude
+
+## Agent preferences
+
+- codex: implementation, tests, refactors, validation, security review.
+- claude: product copy, UX review, docs, planning critique, second-pass review.
+- gemini: optional research, alternate implementation ideas, broad review.
+
+## Protocol
+
+1. Read .coact/team.md and .coact/memory/project.md.
+2. Read your inbox with coact inbox.
+3. During planning, write your proposal under .coact/runs/<run>/proposals/<agent>.md.
+4. Read peer proposals before finalizing execution tasks.
+5. The final distributor writes .coact/runs/<run>/final-plan.md and creates board tasks.
+6. Claim tasks with coact claim <id> before editing.
+7. Lock files or directories before editing unless your adapter has a hard CoAct hook.
+
+`
+
+const memoryTemplate = `# CoAct project memory
+
+Shared local context for agents working in this checkout.
+
+- Keep this file concise.
+- Do not store secrets, API keys, credentials, or private user data.
+- Prefer durable project facts over transient task notes.
+
 `

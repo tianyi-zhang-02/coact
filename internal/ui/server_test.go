@@ -121,6 +121,30 @@ func TestLaunchCommandsAPI(t *testing.T) {
 	}
 }
 
+func TestIndexUsesSimplifiedSetupAndWorkPages(t *testing.T) {
+	chdirTemp(t)
+	ts := newTestServer(t)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	page := string(body)
+	for _, want := range []string{"data-page-target=\"overview\"><span>Setup", "data-page-target=\"work\"><span>Work", "projectSelect", "taskOwner", "id=\"taskBoard\"", "class=\"card span-12 board-details\"", "id=\"workTerminals\"", "id=\"terminalCount\"", "work-terminal-tabs", "data-send-inbox-note"} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("index missing %q", want)
+		}
+	}
+	for _, unwanted := range []string{"data-page-target=\"agents\"", "data-page-target=\"guide\"", "data-page-target=\"advanced\"", "id=\"messages-card\""} {
+		if strings.Contains(page, unwanted) {
+			t.Fatalf("index should not expose %q", unwanted)
+		}
+	}
+}
+
 func TestAgentLaunchAPIUsesInjectedLauncher(t *testing.T) {
 	dir := chdirTemp(t)
 	writeFakeBinary(t, dir, "claude")
@@ -158,6 +182,142 @@ func TestAgentLaunchRejectsUnknownAdapter(t *testing.T) {
 	postJSON(t, ts, "/api/init", nil, http.StatusOK, nil)
 
 	postJSON(t, ts, "/api/agents/not-real/launch", nil, http.StatusBadRequest, nil)
+}
+
+func TestTaskAddCanScheduleOwner(t *testing.T) {
+	chdirTemp(t)
+	ts := newTestServer(t)
+	defer ts.Close()
+	postJSON(t, ts, "/api/init", nil, http.StatusOK, nil)
+
+	var created taskDTO
+	postJSON(t, ts, "/api/tasks", map[string]string{"title": "Run focused UI tests", "owner": "codex"}, http.StatusOK, &created)
+	if created.Owner != "codex" || created.State != "doing" {
+		t.Fatalf("scheduled task = %#v, want owner codex doing", created)
+	}
+	state := getState(t, ts)
+	if !hasTask(state.Tasks, created.ID, "doing", "codex") {
+		t.Fatalf("state missing scheduled task: %#v", state.Tasks)
+	}
+	if !hasJournalEvent(state.Log, "task.schedule") {
+		t.Fatalf("journal did not include task.schedule: %#v", state.Log)
+	}
+}
+
+func TestProjectsAPIAddsAndSwitchesActiveProject(t *testing.T) {
+	dirA := chdirTemp(t)
+	dirB := t.TempDir()
+	ts := newTestServer(t)
+	defer ts.Close()
+
+	postJSON(t, ts, "/api/init", nil, http.StatusOK, nil)
+	postJSON(t, ts, "/api/projects", map[string]string{"root": dirB}, http.StatusOK, nil)
+	state := getState(t, ts)
+	if state.Workspace != dirB || state.Initialized {
+		t.Fatalf("workspace after adding dirB = %q initialized=%v", state.Workspace, state.Initialized)
+	}
+	if !hasProject(state.Projects, dirA, false) || !hasProject(state.Projects, dirB, true) {
+		t.Fatalf("project list missing expected roots: %#v", state.Projects)
+	}
+
+	postJSON(t, ts, "/api/projects/active", map[string]string{"root": dirA}, http.StatusOK, nil)
+	state = getState(t, ts)
+	if state.Workspace != dirA || !state.Initialized {
+		t.Fatalf("workspace after switching back = %q initialized=%v", state.Workspace, state.Initialized)
+	}
+}
+
+func TestTerminalMirrorAPIReadsTranscriptTail(t *testing.T) {
+	dir := chdirTemp(t)
+	ts := newTestServer(t)
+	defer ts.Close()
+	postJSON(t, ts, "/api/init", nil, http.StatusOK, nil)
+
+	logPath := filepath.Join(dir, ".coact", "terminal", "claude.log")
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(logPath, []byte(strings.Repeat("x", 30*1024)+"latest output\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var got struct {
+		Mirrors []terminalMirrorDTO `json:"mirrors"`
+	}
+	getJSON(t, ts, "/api/terminal-mirror?agent=claude", http.StatusOK, &got)
+	if len(got.Mirrors) != 1 {
+		t.Fatalf("expected one mirror, got %#v", got.Mirrors)
+	}
+	mirror := got.Mirrors[0]
+	if mirror.Agent != "claude" || !mirror.Exists {
+		t.Fatalf("unexpected mirror: %#v", mirror)
+	}
+	if !mirror.Truncated {
+		t.Fatalf("large transcript should be truncated: %#v", mirror)
+	}
+	if !strings.Contains(mirror.Tail, "latest output") {
+		t.Fatalf("tail missing latest output: %#v", mirror.Tail)
+	}
+}
+
+func TestTerminalMirrorAPIFullTranscriptRequiresToken(t *testing.T) {
+	dir := chdirTemp(t)
+	ts := newTestServer(t)
+	defer ts.Close()
+	postJSON(t, ts, "/api/init", nil, http.StatusOK, nil)
+
+	logPath := filepath.Join(dir, ".coact", "terminal", "claude.log")
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := strings.Repeat("begin ", 6*1024) + "complete output\n"
+	if err := os.WriteFile(logPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	getJSON(t, ts, "/api/terminal-mirror?agent=claude&full=1", http.StatusForbidden, nil)
+
+	var got struct {
+		Mirrors []terminalMirrorDTO `json:"mirrors"`
+	}
+	getJSONWithToken(t, ts, "/api/terminal-mirror?agent=claude&full=1", http.StatusOK, &got)
+	if len(got.Mirrors) != 1 {
+		t.Fatalf("expected one mirror, got %#v", got.Mirrors)
+	}
+	mirror := got.Mirrors[0]
+	if mirror.Truncated {
+		t.Fatalf("full transcript should not be truncated: %#v", mirror)
+	}
+	if mirror.Tail != body {
+		t.Fatalf("full transcript mismatch: got %d bytes want %d", len(mirror.Tail), len(body))
+	}
+}
+
+func TestTerminalMirrorRejectsUnknownAgent(t *testing.T) {
+	chdirTemp(t)
+	ts := newTestServer(t)
+	defer ts.Close()
+	postJSON(t, ts, "/api/init", nil, http.StatusOK, nil)
+
+	getJSON(t, ts, "/api/terminal-mirror?agent=not-real", http.StatusBadRequest, nil)
+}
+
+func TestAgentTerminalCommandUsesScriptTranscript(t *testing.T) {
+	cmd, logPath, err := agentTerminalCommand("claude", "/tmp/coact test", "/tmp/project root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if logPath != filepath.Join("/tmp/project root", ".coact", "terminal", "claude.log") {
+		t.Fatalf("logPath = %q", logPath)
+	}
+	for _, want := range []string{"script -q -F -a", shellQuote(logPath), shellQuote("/tmp/coact test"), shellQuote("claude")} {
+		if !strings.Contains(cmd, want) {
+			t.Fatalf("command %q missing %q", cmd, want)
+		}
+	}
+	if strings.Contains(cmd, "| tee") {
+		t.Fatalf("command should preserve PTY with script, not pipe through tee: %q", cmd)
+	}
 }
 
 func TestVersionSwitchAPIUsesManagedHome(t *testing.T) {
@@ -250,7 +410,7 @@ func newTestServerWithLauncher(t *testing.T, launcher func(agent, exe, root stri
 
 func newTestServerWithLauncherAndHome(t *testing.T, launcher func(agent, exe, root string) error, versionHome string) *httptest.Server {
 	t.Helper()
-	srv := &Server{token: testToken, launchAgent: launcher, versionHome: versionHome}
+	srv := &Server{token: testToken, launchAgent: launcher, versionHome: versionHome, projectHome: t.TempDir()}
 	mux := http.NewServeMux()
 	srv.routes(mux)
 	// Route through guard so tests exercise the real Host + token defenses.
@@ -280,19 +440,51 @@ func chdirTemp(t *testing.T) string {
 func getState(t *testing.T, ts *httptest.Server) stateResponse {
 	t.Helper()
 	var state stateResponse
-	resp, err := http.Get(ts.URL + "/api/state")
+	getJSON(t, ts, "/api/state", http.StatusOK, &state)
+	return state
+}
+
+func getJSON(t *testing.T, ts *httptest.Server, path string, want int, out any) {
+	t.Helper()
+	resp, err := http.Get(ts.URL + path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != want {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("state status %d: %s", resp.StatusCode, body)
+		t.Fatalf("%s status %d want %d: %s", path, resp.StatusCode, want, body)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&state); err != nil {
+	if out == nil {
+		return
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
 		t.Fatal(err)
 	}
-	return state
+}
+
+func getJSONWithToken(t *testing.T, ts *httptest.Server, path string, want int, out any) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, ts.URL+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("X-Coact-Token", testToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != want {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("%s status %d want %d: %s", path, resp.StatusCode, want, body)
+	}
+	if out == nil {
+		return
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func postJSON(t *testing.T, ts *httptest.Server, path string, body any, want int, out any) {
@@ -348,6 +540,15 @@ func hasJournalEvent(records []map[string]string, event string) bool {
 func hasLocalVersion(versions []versionmgr.LocalInfo, version string, active bool) bool {
 	for _, local := range versions {
 		if local.Version == version && local.Active == active {
+			return true
+		}
+	}
+	return false
+}
+
+func hasProject(projects []projectDTO, root string, active bool) bool {
+	for _, project := range projects {
+		if project.Root == root && project.Active == active {
 			return true
 		}
 	}

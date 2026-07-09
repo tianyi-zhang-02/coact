@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tianyi-zhang-02/coact/internal/adapter"
@@ -81,13 +83,16 @@ func Serve(opts Options) error {
 	return httpSrv.Serve(ln)
 }
 
-// Server serves HTTP API handlers. It is stateless apart from the per-run CSRF
-// token minted at startup.
+// Server serves HTTP API handlers. It keeps only local UI session state: the
+// per-run CSRF token and the active project selected in the browser.
 type Server struct {
 	lang        string
 	token       string
 	launchAgent func(agent, exe, root string) error
 	versionHome string
+	projectHome string
+	mu          sync.RWMutex
+	activeRoot  string
 }
 
 // guard enforces the two protections that make a browser-reachable control
@@ -112,13 +117,17 @@ func (s *Server) guard(next http.Handler) http.Handler {
 		switch r.Method {
 		case http.MethodGet, http.MethodHead, http.MethodOptions:
 		default:
-			if s.token == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Coact-Token")), []byte(s.token)) != 1 {
+			if !s.validToken(r) {
 				http.Error(w, "coact ui: missing or invalid token", http.StatusForbidden)
 				return
 			}
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (s *Server) validToken(r *http.Request) bool {
+	return s.token != "" && subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Coact-Token")), []byte(s.token)) == 1
 }
 
 // isLoopbackHost reports whether the request's Host header names this machine.
@@ -155,6 +164,9 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/tasks/", s.handleTaskAction)
 	mux.HandleFunc("/api/messages", s.handleMessages)
 	mux.HandleFunc("/api/launch-commands", s.handleLaunchCommands)
+	mux.HandleFunc("/api/projects", s.handleProjects)
+	mux.HandleFunc("/api/projects/active", s.handleProjectActive)
+	mux.HandleFunc("/api/terminal-mirror", s.handleTerminalMirror)
 	mux.HandleFunc("/api/versions/", s.handleVersionAction)
 }
 
@@ -183,6 +195,7 @@ type stateResponse struct {
 	Log         []map[string]string    `json:"log"`
 	Versions    []versionmgr.LocalInfo `json:"versions"`
 	Manifest    *versionmgr.Manifest   `json:"manifest,omitempty"`
+	Projects    []projectDTO           `json:"projects"`
 }
 
 type taskDTO struct {
@@ -202,6 +215,33 @@ type agentDTO struct {
 	Beat        string `json:"beat"`
 }
 
+type projectDTO struct {
+	Name        string `json:"name"`
+	Root        string `json:"root"`
+	Initialized bool   `json:"initialized"`
+	Active      bool   `json:"active"`
+}
+
+type projectRegistry struct {
+	Projects []projectRecord `json:"projects"`
+}
+
+type projectRecord struct {
+	Root     string `json:"root"`
+	Name     string `json:"name,omitempty"`
+	LastSeen string `json:"last_seen,omitempty"`
+}
+
+type terminalMirrorDTO struct {
+	Agent     string `json:"agent"`
+	Exists    bool   `json:"exists"`
+	Path      string `json:"path"`
+	Size      int64  `json:"size"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+	Tail      string `json:"tail"`
+	Truncated bool   `json:"truncated"`
+}
+
 func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		methodNotAllowed(w)
@@ -216,14 +256,9 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) state() (*stateResponse, error) {
-	p, err := project.Resolve()
-	initialized := err == nil
-	if !initialized {
-		root, locateErr := project.Locate()
-		if locateErr != nil {
-			return nil, locateErr
-		}
-		p = &project.Project{Root: root, CheckoutRoot: root}
+	p, initialized, err := s.currentProject()
+	if err != nil {
+		return nil, err
 	}
 
 	st := &stateResponse{
@@ -233,6 +268,7 @@ func (s *Server) state() (*stateResponse, error) {
 		Commit:      buildinfo.Commit,
 		Versions:    versionmgr.LocalVersions(s.managedHome()),
 		Manifest:    versionmgr.BundledManifest(),
+		Projects:    s.projectList(p.Root),
 	}
 	if st.Manifest != nil && st.Manifest.Version == "dev" {
 		st.Manifest.Version = buildinfo.Version
@@ -310,16 +346,18 @@ func (s *Server) handleInit(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	root, err := project.Locate()
+	p, _, err := s.currentProject()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	res, err := setup.Initialize(root, "human")
+	res, err := setup.Initialize(p.Root, "human")
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	s.setActiveRoot(res.Root)
+	_ = s.rememberProject(res.Root)
 	writeJSON(w, http.StatusOK, res)
 }
 
@@ -328,7 +366,7 @@ func (s *Server) handleBrief(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	p, err := requireProject()
+	p, err := s.requireProject()
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -353,13 +391,14 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	p, err := requireProject()
+	p, err := s.requireProject()
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 	var req struct {
 		Title string `json:"title"`
+		Owner string `json:"owner"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
@@ -377,10 +416,26 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		out = b.Add(title)
+		owner := sanitizeAgent(req.Owner)
+		if owner != "" {
+			if claimed, err := b.Claim(out.ID, owner, 1800); err == nil {
+				out = claimed
+			} else {
+				return err
+			}
+		}
 		if err := b.Save(); err != nil {
 			return err
 		}
-		_ = journal.Append(p.JournalDir(), "human", "task.add", map[string]string{"id": out.ID})
+		event := "task.add"
+		agent := "human"
+		meta := map[string]string{"id": out.ID}
+		if out.Owner != "" {
+			event = "task.schedule"
+			agent = out.Owner
+			meta["owner"] = out.Owner
+		}
+		_ = journal.Append(p.JournalDir(), agent, event, meta)
 		return nil
 	})
 	if err != nil {
@@ -395,7 +450,7 @@ func (s *Server) handleTaskAction(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	p, err := requireProject()
+	p, err := s.requireProject()
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -453,7 +508,7 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 		return
 	}
-	p, err := requireProject()
+	p, err := s.requireProject()
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -500,7 +555,7 @@ func (s *Server) handleAgentAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Errorf("unknown adapter %q", agent))
 		return
 	}
-	p, err := requireProject()
+	p, err := s.requireProject()
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -556,6 +611,48 @@ func (s *Server) handleLaunchCommands(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"commands": commands})
 }
 
+func (s *Server) handleTerminalMirror(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	p, err := s.requireProject()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	agent := sanitizeAgent(r.URL.Query().Get("agent"))
+	full := r.URL.Query().Get("full") == "1" || strings.EqualFold(r.URL.Query().Get("full"), "true")
+	if full && !s.validToken(r) {
+		writeError(w, http.StatusForbidden, errors.New("full transcript requires UI token"))
+		return
+	}
+	if full && agent == "" {
+		writeError(w, http.StatusBadRequest, errors.New("full transcript requires an agent"))
+		return
+	}
+	var agents []adapter.Adapter
+	if agent != "" {
+		ad, ok := adapter.Get(agent)
+		if !ok {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("unknown adapter %q", agent))
+			return
+		}
+		agents = []adapter.Adapter{ad}
+	} else {
+		agents = adapter.All()
+	}
+	limit := int64(24 * 1024)
+	if full {
+		limit = 0
+	}
+	var mirrors []terminalMirrorDTO
+	for _, ad := range agents {
+		mirrors = append(mirrors, readTerminalMirror(p, ad.ID, limit))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"mirrors": mirrors})
+}
+
 func (s *Server) handleVersionAction(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w)
@@ -570,10 +667,77 @@ func (s *Server) handleVersionAction(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	if p, err := requireProject(); err == nil {
+	if p, err := s.requireProject(); err == nil {
 		_ = journal.Append(p.JournalDir(), "human", "version.switch", map[string]string{"version": version, "via": "ui"})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "version": version})
+}
+
+func (s *Server) handleProjects(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		p, _, err := s.currentProject()
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"projects": s.projectList(p.Root), "active": p.Root})
+	case http.MethodPost:
+		var req struct {
+			Root string `json:"root"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		root := strings.TrimSpace(req.Root)
+		if root == "" {
+			located, err := project.Locate()
+			if err != nil {
+				writeError(w, http.StatusBadRequest, err)
+				return
+			}
+			root = located
+		}
+		p, _, err := s.projectFromRoot(root)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err)
+			return
+		}
+		s.setActiveRoot(p.Root)
+		if err := s.rememberProject(p.Root); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "root": p.Root, "projects": s.projectList(p.Root)})
+	default:
+		methodNotAllowed(w)
+	}
+}
+
+func (s *Server) handleProjectActive(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	var req struct {
+		Root string `json:"root"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	p, _, err := s.projectFromRoot(req.Root)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	s.setActiveRoot(p.Root)
+	if err := s.rememberProject(p.Root); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "root": p.Root, "projects": s.projectList(p.Root)})
 }
 
 func (s *Server) managedHome() string {
@@ -583,12 +747,151 @@ func (s *Server) managedHome() string {
 	return versionmgr.DefaultHome()
 }
 
-func requireProject() (*project.Project, error) {
-	p, err := project.Resolve()
+func (s *Server) projectsHome() string {
+	if s.projectHome != "" {
+		return s.projectHome
+	}
+	return versionmgr.DefaultHome()
+}
+
+func (s *Server) projectRegistryPath() string {
+	return filepath.Join(s.projectsHome(), "projects.json")
+}
+
+func (s *Server) currentProject() (*project.Project, bool, error) {
+	if root := s.activeRootValue(); root != "" {
+		p, initialized, err := s.projectFromRoot(root)
+		if err == nil {
+			_ = s.rememberProject(p.Root)
+			return p, initialized, nil
+		}
+		s.setActiveRoot("")
+	}
+	if p, err := project.Resolve(); err == nil {
+		s.setActiveRoot(p.Root)
+		_ = s.rememberProject(p.Root)
+		return p, true, nil
+	}
+	root, err := project.Locate()
 	if err != nil {
+		return nil, false, err
+	}
+	p, initialized, err := s.projectFromRoot(root)
+	if err != nil {
+		return nil, false, err
+	}
+	s.setActiveRoot(p.Root)
+	_ = s.rememberProject(p.Root)
+	return p, initialized, nil
+}
+
+func (s *Server) requireProject() (*project.Project, error) {
+	p, initialized, err := s.currentProject()
+	if err != nil || !initialized {
 		return nil, errors.New("coact is not initialized here")
 	}
 	return p, nil
+}
+
+func (s *Server) projectFromRoot(root string) (*project.Project, bool, error) {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return nil, false, errors.New("project root is required")
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return nil, false, err
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return nil, false, err
+	}
+	if !info.IsDir() {
+		return nil, false, fmt.Errorf("%q is not a directory", abs)
+	}
+	if p, err := project.ResolveFrom(abs); err == nil {
+		return p, true, nil
+	}
+	return &project.Project{Root: abs, CheckoutRoot: abs}, false, nil
+}
+
+func (s *Server) activeRootValue() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.activeRoot
+}
+
+func (s *Server) setActiveRoot(root string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.activeRoot = root
+}
+
+func (s *Server) projectList(activeRoot string) []projectDTO {
+	reg := s.loadProjectRegistry()
+	seen := map[string]bool{}
+	var out []projectDTO
+	for _, rec := range reg.Projects {
+		p, initialized, err := s.projectFromRoot(rec.Root)
+		if err != nil || seen[p.Root] {
+			continue
+		}
+		seen[p.Root] = true
+		name := strings.TrimSpace(rec.Name)
+		if name == "" {
+			name = filepath.Base(p.Root)
+		}
+		out = append(out, projectDTO{Name: name, Root: p.Root, Initialized: initialized, Active: p.Root == activeRoot})
+	}
+	if activeRoot != "" && !seen[activeRoot] {
+		if p, initialized, err := s.projectFromRoot(activeRoot); err == nil {
+			out = append(out, projectDTO{Name: filepath.Base(p.Root), Root: p.Root, Initialized: initialized, Active: true})
+		}
+	}
+	return out
+}
+
+func (s *Server) rememberProject(root string) error {
+	p, _, err := s.projectFromRoot(root)
+	if err != nil {
+		return err
+	}
+	reg := s.loadProjectRegistry()
+	now := time.Now().UTC().Format(time.RFC3339)
+	for i := range reg.Projects {
+		if reg.Projects[i].Root == p.Root {
+			if reg.Projects[i].Name == "" || reg.Projects[i].LastSeen == "" {
+				reg.Projects[i].Name = filepath.Base(p.Root)
+				reg.Projects[i].LastSeen = now
+				return s.saveProjectRegistry(reg)
+			}
+			return nil
+		}
+	}
+	reg.Projects = append(reg.Projects, projectRecord{Root: p.Root, Name: filepath.Base(p.Root), LastSeen: now})
+	return s.saveProjectRegistry(reg)
+}
+
+func (s *Server) loadProjectRegistry() projectRegistry {
+	var reg projectRegistry
+	data, err := os.ReadFile(s.projectRegistryPath())
+	if err != nil {
+		return reg
+	}
+	_ = json.Unmarshal(data, &reg)
+	return reg
+}
+
+func (s *Server) saveProjectRegistry(reg projectRegistry) error {
+	if err := os.MkdirAll(s.projectsHome(), 0o700); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(reg, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return platform.AtomicWrite(s.projectRegistryPath(), data, 0o600)
 }
 
 func withBoardLock(p *project.Project, fn func() error) error {
@@ -650,6 +953,47 @@ func readString(path string) string {
 	return string(data)
 }
 
+func terminalDir(root string) string {
+	return filepath.Join(root, ".coact", "terminal")
+}
+
+func terminalLogPath(root, agent string) string {
+	return filepath.Join(terminalDir(root), sanitizeAgent(agent)+".log")
+}
+
+func readTerminalMirror(p *project.Project, agent string, limit int64) terminalMirrorDTO {
+	path := terminalLogPath(p.Root, agent)
+	out := terminalMirrorDTO{Agent: agent, Path: path}
+	info, err := os.Stat(path)
+	if err != nil {
+		return out
+	}
+	out.Exists = true
+	out.Size = info.Size()
+	out.UpdatedAt = info.ModTime().UTC().Format(time.RFC3339)
+
+	file, err := os.Open(path)
+	if err != nil {
+		return out
+	}
+	defer file.Close()
+
+	start := int64(0)
+	if limit > 0 && out.Size > limit {
+		start = out.Size - limit
+		out.Truncated = true
+	}
+	if _, err := file.Seek(start, io.SeekStart); err != nil {
+		return out
+	}
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return out
+	}
+	out.Tail = string(data)
+	return out
+}
+
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -693,9 +1037,27 @@ func launchAgentTerminal(agent, exe, root string) error {
 	if !terminalLaunchSupported() {
 		return fmt.Errorf("one-click terminal launch is currently supported on macOS only; run %s manually", shellQuote(exe+" "+agent))
 	}
-	cmd := "cd " + shellQuote(root) + " && " + shellQuote(exe) + " " + shellQuote(agent)
+	cmd, logPath, err := agentTerminalCommand(agent, exe, root)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err != nil {
+		return err
+	}
 	script := `tell application "Terminal" to do script "` + appleScriptQuote(cmd) + `"`
 	return exec.Command("osascript", "-e", script).Start()
+}
+
+func agentTerminalCommand(agent, exe, root string) (string, string, error) {
+	if agent = sanitizeAgent(agent); agent == "" {
+		return "", "", errors.New("agent is required")
+	}
+	logPath := terminalLogPath(root, agent)
+	cmd := "mkdir -p " + shellQuote(filepath.Dir(logPath)) +
+		" && cd " + shellQuote(root) +
+		" && script -q -F -a " + shellQuote(logPath) +
+		" " + shellQuote(exe) + " " + shellQuote(agent)
+	return cmd, logPath, nil
 }
 
 func shellQuote(s string) string {

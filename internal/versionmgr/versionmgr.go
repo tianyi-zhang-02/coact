@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -74,7 +75,7 @@ const bundledManifestJSON = `{
   "channel": "beta",
   "stability": "experimental",
   "recommended": false,
-  "summary": "Initial release with local control center, shared brief, UI task/message controls, and managed versions.",
+  "summary": "Initial terminal-native coordination release with @agent inbox messages, planning runs, shared memory, tasks, locks, and managed versions.",
   "supports": {
     "cli": true,
     "ui": true,
@@ -84,10 +85,11 @@ const bundledManifestJSON = `{
     "platforms": ["darwin/amd64", "darwin/arm64", "linux/amd64", "linux/arm64", "windows/amd64", "windows/arm64"]
   },
   "notes": [
-    "coact with no arguments opens the local-only control center.",
-    "Existing CLI subcommands remain available through coact help.",
+    "coact with no arguments shows the terminal-native workspace summary.",
+    "Use coact @agent, coact @all, and coact plan for native-terminal coordination.",
+    "coact ui remains available as an optional experimental local control center.",
     "coact update installs into ~/.coact and never overwrites system binaries.",
-    "Real-time push remains experimental; the default UI uses polling.",
+    "Real-time push remains experimental; the default workflow is turn-based inbox coordination.",
     "The control center is local-only: it binds 127.0.0.1, checks the Host header, and requires a per-run token.",
     "coact update verifies SHA-256 checksums over HTTPS; releases are not yet cryptographically signed."
   ],
@@ -477,6 +479,9 @@ func getJSON(client *http.Client, url string, out any) error {
 }
 
 func getBytes(client *http.Client, url string) ([]byte, error) {
+	if err := requireHTTPS(url); err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
@@ -495,6 +500,9 @@ func getBytes(client *http.Client, url string) ([]byte, error) {
 }
 
 func downloadToTemp(client *http.Client, url, name string) (string, error) {
+	if err := requireHTTPS(url); err != nil {
+		return "", err
+	}
 	resp, err := client.Get(url)
 	if err != nil {
 		return "", err
@@ -648,8 +656,25 @@ func validateVersion(version string) error {
 	if strings.TrimSpace(version) == "" {
 		return errors.New("version is required")
 	}
-	if strings.ContainsAny(version, `/\`) || version == "." || version == ".." {
+	if version != strings.TrimSpace(version) || strings.ContainsAny(version, `/\`) || strings.Contains(version, "..") || version == "." || version == ".." {
 		return fmt.Errorf("invalid version %q", version)
+	}
+	for _, r := range version {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '.' || r == '_' || r == '-' {
+			continue
+		}
+		return fmt.Errorf("invalid version %q", version)
+	}
+	return nil
+}
+
+func requireHTTPS(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return err
+	}
+	if u.Scheme != "https" || u.Host == "" {
+		return fmt.Errorf("refusing non-HTTPS release URL %q", rawURL)
 	}
 	return nil
 }

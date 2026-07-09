@@ -2,33 +2,17 @@
 
 **English** · [中文](README.zh-CN.md)
 
-**A local control center for multiple coding agents working in one repository.**
+**Terminal-native coordination for multiple coding agents in one repository.**
 
-CoAct lets you use Claude Code, Codex, Gemini, or other coding agents on the
-same project without manually copying context between them or guessing who owns
-which files. It gives you a local UI, a shared brief, tasks, messages, locks,
-policy checks, an audit log, and managed updates — all in one static Go binary.
+CoAct lets Claude Code, Codex, Gemini, and other coding agents work in the same
+project without copying context by hand or overwriting each other. Agents keep
+using their native terminals. CoAct provides the shared coordination layer:
+team policy, project memory, planning runs, task ownership, inbox messages,
+write-intent locks, policy checks, and an audit journal.
 
-CoAct is not a model provider and does not replace your agents. It coordinates
-the tools you already use.
+CoAct is not a model provider and does not replace your agent CLIs.
 
 ## Quickstart
-
-Install CoAct, then run this inside a repo:
-
-```sh
-coact
-```
-
-`coact` opens the local control center at `127.0.0.1`. From the UI you can:
-
-1. Initialize the repo.
-2. Write a project brief for all agents.
-3. Create and assign tasks.
-4. Copy launch commands for Claude Code, Codex, or Gemini.
-5. Watch agents, locks, messages, and the activity log update live.
-
-Prefer terminal-only usage? The CLI still works:
 
 ```sh
 coact init
@@ -37,17 +21,40 @@ coact claude      # terminal 1
 coact codex       # terminal 2
 ```
 
-`coact doctor` validates the wiring and runs a local enforcement self-test. It
-does not require a second agent.
+Then coordinate from any terminal:
 
-## Typical workflow
+```sh
+coact @codex "Please review Claude's proposal."
+coact @claude "Please check the UX copy."
+coact @all "Planning starts now. Read the run brief."
+coact inbox
+```
 
-### 1. Plan in the control center
+Start a structured planning phase:
 
-Use `coact` to write the brief and task list. The shared state lives in
-`.coact/`, so every agent sees the same board without burning context tokens.
+```sh
+coact plan --with codex,claude --distributor codex "Build the auth module safely"
+```
 
-### 2. Launch agents
+CoAct creates `.coact/runs/<run>/`, asks each agent to write a proposal, and
+asks the configured final distributor to write the final plan and create tasks.
+
+## Workflow
+
+### 1. Define team policy
+
+`coact init` creates `.coact/team.md`. Use it to define preferences such as:
+
+- who is the `final_task_distributor`
+- which agents participate in planning
+- what Claude/Codex/Gemini should usually own
+- what every agent must read before starting
+
+Local long-lived context goes in `.coact/memory/project.md`.
+
+### 2. Run native terminals
+
+Agents stay in their own CLIs:
 
 ```sh
 coact claude
@@ -55,97 +62,104 @@ coact codex
 coact gemini
 ```
 
-Each launcher sets the agent identity, keeps presence alive, and releases that
-session's locks when it exits.
+The launchers set `COACT_AGENT`, keep presence alive, and release session locks
+on exit. You can also run the agent CLIs manually as long as they follow the
+repo contract files.
 
-### 3. Divide work
-
-Use the UI or CLI:
+### 3. Plan together
 
 ```sh
-coact task add "Build auth module"
+coact plan --with codex,claude --distributor codex "Refactor the CLI"
+coact plan status
+```
+
+Planning files live under `.coact/runs/<run>/`:
+
+- `brief.md` — human/task brief
+- `proposals/<agent>.md` — each agent's independent plan
+- `notes/<agent>.md` — optional second-pass notes after reading peers
+- `final-plan.md` — distributor's execution decision
+
+### 4. Execute without collisions
+
+```sh
+coact board
+coact task add "Add @agent inbox syntax"
 coact claim T-001
+coact lock internal/cli
 coact done T-001
 ```
 
-### 4. Avoid file collisions
+CoAct serializes board mutations so agents cannot claim the same task at once.
+Write-intent locks prevent overlapping edits. Claude Code receives L2 hook
+enforcement; Codex and Gemini receive L1 contract enforcement.
 
-CoAct tracks write-intent locks and policy:
-
-- Claude Code gets L2 enforcement through a `PreToolUse` hook.
-- Codex and Gemini get L1 enforcement through their repo contract files.
-- Protected paths and per-agent write scopes are policy-gated.
-- Every significant action is journaled.
-
-If another agent owns a path, CoAct tells the agent to stop and coordinate
-instead of silently overwriting work.
-
-### 5. Message or hand off
+### 5. Message and hand off
 
 ```sh
-coact msg codex "Please review the auth diff."
+coact @claude "Please review T-001 before I mark it done."
 coact inbox
-coact handoff codex "Auth is mostly done; finish token refresh."
+coact handoff codex "I finished parser changes; tests still need work."
 ```
 
-Messages are local, governed, and journaled. The default path is turn-based;
-real-time push remains experimental.
-
-### 6. Isolate with worktrees when needed
-
-```sh
-coact claude --worktree
-coact codex --worktree
-coact merge claude codex
-```
-
-Worktree mode gives each agent its own branch while keeping the board and
-journal shared.
+Messages are local filesystem inbox entries. They are not shell execution, and
+they are journaled.
 
 ## Design
 
 ```mermaid
 flowchart TB
-    Human["Human lead"] --> UI["Local Control Center<br/>coact / coact ui"]
-    Human --> CLI["CLI power tools<br/>init · doctor · status · merge"]
+    Human["Human lead"] --> CLI["CoAct CLI"]
+    CLI --> Memory[".coact/team.md<br/>.coact/memory/project.md"]
+    CLI --> Runs[".coact/runs/<run><br/>brief · proposals · final plan"]
+    CLI --> Board[".coact/board.md<br/>claim · done"]
+    CLI --> Inbox[".coact/inbox<br/>@agent messages"]
+    CLI --> Locks[".coact/locks<br/>write-intent registry"]
+    CLI --> Journal[".coact/journal<br/>audit log"]
 
-    UI --> API["Local HTTP API<br/>127.0.0.1 · Host allowlist · CSRF token"]
-    API --> Core["CoAct Core<br/>brief · tasks · inbox · locks · policy · journal"]
-    CLI --> Core
+    Claude["Claude Code terminal"] --> CLI
+    Codex["Codex terminal"] --> CLI
+    Gemini["Gemini terminal"] --> CLI
 
-    Core --> FS[".coact workspace state<br/>brief.md · board.md · locks/ · inbox/ · session/ · journal/"]
-    Core --> Claude["Claude Code<br/>L2 hook hard-blocks conflicts"]
-    Core --> Codex["Codex<br/>L1 repo contract + launcher"]
-    Core --> Gemini["Gemini<br/>L1 repo contract + launcher"]
-    Core --> Versions["Managed versions<br/>~/.coact/bin + ~/.coact/coact shim"]
-
-    Claude -. messages / handoff .- Codex
-    Codex -. messages / handoff .- Gemini
+    Locks --> Policy["policy checks"]
+    Board --> Execution["safe parallel execution"]
 ```
 
-The UI is the cockpit. The core is the governance layer. The agents still run as
-their normal CLIs.
+The default product is terminal-native. `coact ui` remains optional and
+experimental; it is not required for the main workflow.
 
 ## Commands
 
 | Command | Purpose |
 |---|---|
-| `coact` / `coact ui` | Open the local control center |
+| `coact` | Show terminal workspace summary |
 | `coact init` / `doctor` / `deinit` | Set up, verify, or remove CoAct wiring |
-| `coact claude` / `codex` / `gemini` | Launch managed agent sessions |
+| `coact claude` / `codex` / `gemini` | Launch managed native agent sessions |
+| `coact @agent "..."` / `@all "..."` | Send local inbox messages |
+| `coact plan "..."` / `plan status` | Create or inspect a planning run |
 | `coact board` / `task add` / `claim` / `done` | Manage shared tasks |
 | `coact status` / `log` | Inspect participants, locks, and audit trail |
-| `coact msg` / `inbox` / `handoff` | Communicate between agents |
+| `coact inbox` / `handoff` | Read messages or transfer context/tasks |
 | `coact lock` / `unlock` / `policy` | Manage write intent and policy checks |
 | `coact worktree` / `merge` | Isolate agents on branches and integrate work |
 | `coact versions` / `update` / `switch` | Manage binaries under `~/.coact` |
-| `coact channel` / `bridge` | Experimental real-time agent bridge |
+| `coact ui` | Optional experimental local UI |
 
 Run `coact help` for the full command list.
 
-## Install
+## Safety
 
-From source:
+- `@agent` and inbox messages only write local files; they do not execute shell.
+- Board mutations are serialized, so two agents cannot claim the same task at once.
+- Write-intent locks prevent accidental overlapping edits.
+- Runtime/sensitive coordination state is gitignored: inbox, journal, locks,
+  sessions, terminal logs, planning runs, and local memory.
+- Hooks fail open: if CoAct errors, it does not brick your editor.
+- `coact update` is opt-in, uses HTTPS, and verifies SHA-256 checksums.
+
+See [SECURITY.md](SECURITY.md) for the full model.
+
+## Install
 
 ```sh
 go install github.com/tianyi-zhang-02/coact/cmd/coact@latest
@@ -158,35 +172,6 @@ git clone https://github.com/tianyi-zhang-02/coact
 cd coact
 go build -o coact ./cmd/coact
 ```
-
-Managed updates install side-by-side into `~/.coact/bin` and only switch the
-managed shim:
-
-```sh
-coact update --channel stable
-coact versions
-coact switch v0.1.0
-```
-
-## Safety
-
-- The UI binds locally and also enforces a Host allowlist plus a per-run CSRF
-  token.
-- The UI does not expose an arbitrary shell execution API.
-- Hooks fail open: if CoAct errors, it does not brick your editor.
-- Runtime state stays in `.coact/`; managed binaries stay in `~/.coact`.
-- `coact update` is opt-in, uses HTTPS, and verifies SHA-256 checksums.
-
-See [SECURITY.md](SECURITY.md) for the full model.
-
-## Status
-
-Available now: local control center, task board, brief, locks, policy, journal,
-Claude hook enforcement, Codex/Gemini contracts, turn-based messaging, handoff,
-worktree mode, merge gates, and managed updates.
-
-Next: embedded live terminals, UI model selection, deeper real-time control,
-autopilot, and release signing. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## License
 

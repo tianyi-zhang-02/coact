@@ -42,10 +42,13 @@ func (a Adapter) Enforcement() string {
 }
 
 const coordinate = `Coordinate with the other agents in this repo:
-- Divide the work on the board: "coact board", "coact claim <id>", "coact done <id>".
-- Talk to another agent directly (no human relay): run "coact inbox" at the start
-  of each turn to read messages; "coact msg <agent> \"...\"" to send; and
-  "coact handoff <agent> \"context\"" if you must stop or hit your plan's limit.
+- Read ".coact/team.md" and ".coact/memory/project.md" at the start of each session.
+- Divide work on the board: "coact board", "coact claim <id>", "coact done <id>".
+- Talk directly through the local inbox: run "coact inbox" at the start of each
+  turn; send with "coact @codex \"...\"", "coact @claude \"...\"", or
+  "coact @all \"...\""; and use "coact handoff <agent> \"context\"" if you stop.
+- Planning phases live under ".coact/runs/<run>/"; write proposals there, read
+  peer proposals, then let the configured final_task_distributor create tasks.
 - "coact status" and "coact log" show the shared picture.`
 
 // Contract returns the collaboration contract injected into the agent's context

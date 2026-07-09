@@ -68,10 +68,18 @@ func Default() *Config {
 		Policy: PolicyConfig{
 			OnConflict:        "block",
 			AllowStealExpired: true,
-			// Protect coact's own coordination state from being rewritten by an
-			// agent. Add paths like ".github/workflows/**" or secrets here to
-			// require a human for them too.
-			ProtectedPaths: []string{".coact/**"},
+			// Protect coact's machine-mutated coordination state from direct
+			// rewrites. Planning runs and local memory remain editable through
+			// normal locks so agents can write proposals and durable notes.
+			ProtectedPaths: []string{
+				".coact/config.json",
+				".coact/board.md",
+				".coact/locks/**",
+				".coact/session/**",
+				".coact/journal/**",
+				".coact/inbox/**",
+				".coact/terminal/**",
+			},
 		},
 	}
 }

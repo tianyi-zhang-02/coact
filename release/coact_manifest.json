@@ -3,7 +3,7 @@
   "channel": "beta",
   "stability": "experimental",
   "recommended": false,
-  "summary": "Initial release with local control center and multi-agent governance.",
+  "summary": "Initial terminal-native coordination release with @agent inbox messages, planning runs, shared memory, tasks, locks, and managed versions.",
   "supports": {
     "cli": true,
     "ui": true,
@@ -20,10 +20,11 @@
     ]
   },
   "notes": [
-    "coact with no arguments opens the local-only web control center.",
-    "Existing CLI subcommands remain available through coact help.",
+    "coact with no arguments shows the terminal-native workspace summary.",
+    "Use coact @agent, coact @all, and coact plan for native-terminal coordination.",
+    "coact ui remains available as an optional experimental local control center.",
     "coact update installs into ~/.coact and never overwrites system binaries.",
-    "Real-time push remains experimental; the default UI uses polling.",
+    "Real-time push remains experimental; the default workflow is turn-based inbox coordination.",
     "The control center is local-only: it binds 127.0.0.1, checks the Host header, and requires a per-run token.",
     "coact update verifies SHA-256 checksums over HTTPS; releases are not yet cryptographically signed."
   ],

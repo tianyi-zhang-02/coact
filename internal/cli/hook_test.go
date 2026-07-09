@@ -57,13 +57,21 @@ func TestHookDecisionAllowsFreePath(t *testing.T) {
 }
 
 func TestHookDecisionBlocksProtectedPath(t *testing.T) {
-	p := setupProject(t) // default protects .coact/**
+	p := setupProject(t) // default protects machine-mutated coact state
 	deny, reason := hookDecision("claude", editPayload(p.Root, ".coact/config.json"))
 	if !deny {
 		t.Fatal("editing a protected path should be denied")
 	}
 	if !strings.Contains(reason, "protected") {
 		t.Errorf("reason should mention protected: %s", reason)
+	}
+}
+
+func TestHookDecisionAllowsPlanningRunPath(t *testing.T) {
+	p := setupProject(t)
+	deny, reason := hookDecision("claude", editPayload(p.Root, ".coact/runs/run-1/proposals/claude.md"))
+	if deny {
+		t.Fatalf("planning proposal path should be writable through normal locks: %s", reason)
 	}
 }
 

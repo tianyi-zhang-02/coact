@@ -13,12 +13,12 @@ Target ship: **2026-07-09** (3 days from 2026-07-06).
 > needs an authenticated terminal. See [ARCHITECTURE.md](ARCHITECTURE.md) for
 > the current design.
 
-> **Progress (2026-07-07):** added the first local control center and managed
-> version layout. `coact` now opens a localhost UI by default while the original
-> CLI remains under `coact help`. The UI covers setup, brief, tasks, agents,
-> locks, messages, journal, launch commands, and versions. `coact update`,
-> `coact versions`, and `coact switch` manage side-by-side binaries under
-> `~/.coact` with checksum verification.
+> **Progress (2026-07-08):** pivoted the default product back to a
+> terminal-native coordination layer. `coact` now shows a workspace summary,
+> `coact @agent` / `coact @all` provide direct inbox messaging, and
+> `coact plan` creates planning runs under `.coact/runs/<run>/`. The optional
+> local UI remains experimental; the release is centered on native terminals,
+> shared memory, task ownership, locks, policy, and journaled coordination.
 
 ## What "usable MVP" means
 
@@ -45,29 +45,30 @@ installs in one line, it's an MVP.
 
 ## Scope
 
-**In:** Claude Code + Codex + Gemini adapters, shared tree, advisory locks with
-Claude L2 hook enforcement, capability policy, board, journal, status, local UI,
-turn-based messaging, worktree mode + merge gates, and real release.
+**In:** Claude Code + Codex + Gemini adapters, native-terminal workflow,
+`@agent` inbox messaging, planning runs, shared local memory, shared tree,
+advisory locks with Claude L2 hook enforcement, capability policy, board,
+journal, status, worktree mode + merge gates, and real release.
 
 **Out (v0.2+):** embedded live terminals, UI model switching, deeper real-time
 mid-turn control, autopilot, release signing, and visual/binary diffs.
 Listed in the README as "coming" so the first release reads as scoped, not thin.
 
-## v0.1.0 — Initial local control center
+## v0.1.0 — Initial terminal-native coordination
 
-The CLI remains the power-user surface, but the default path is now the local UI.
 The acceptance bar for the first public release:
 
-1. `coact` opens a local-only web control center; `coact ui --no-open` supports
-   headless use.
-2. The UI initializes a repo without shelling out, writes `.coact/brief.md`,
-   adds/claims/finishes tasks, sends inbox messages, and shows board/status/log.
-3. The UI never executes arbitrary shell; it binds only `127.0.0.1`/`localhost`
-   and additionally enforces a Host-header allowlist and a per-run CSRF token, so
-   a browser page cannot drive it.
-4. `coact update` downloads releases into `~/.coact/bin`, verifies SHA-256, and
+1. `coact` shows a terminal workspace summary and never opens a browser by
+   default.
+2. `coact @agent` and `coact @all` send local, journaled inbox messages without
+   executing shell commands.
+3. `coact plan` creates `.coact/runs/<run>/` with a brief, proposal files,
+   final-plan file, and inbox notifications for participating agents.
+4. `.coact/team.md` defines coordination preferences; `.coact/memory/project.md`
+   carries local shared project memory.
+5. `coact update` downloads releases into `~/.coact/bin`, verifies SHA-256, and
    switches only the managed `~/.coact/coact` shim.
-5. Version descriptions show channel, stability, feature support, and notes so a
+6. Version descriptions show channel, stability, feature support, and notes so a
    user can choose stable/beta/experimental intentionally.
 
 ## Day-by-day

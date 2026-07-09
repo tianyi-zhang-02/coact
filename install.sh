@@ -33,13 +33,46 @@ fi
 
 tarball="${BINARY}_${version#v}_${os}_${arch}.tar.gz"
 url="https://github.com/${REPO}/releases/download/${version}/${tarball}"
+checksums_url="https://github.com/${REPO}/releases/download/${version}/checksums.txt"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 echo "coact: downloading ${version} for ${os}/${arch}"
 curl -fsSL "$url" -o "$tmp/$tarball"
-tar -xzf "$tmp/$tarball" -C "$tmp"
+curl -fsSL "$checksums_url" -o "$tmp/checksums.txt"
+
+expected=$(
+  awk -v file="$tarball" '$2 == file || $2 == "./" file { print $1; exit }' "$tmp/checksums.txt"
+)
+if [ -z "$expected" ]; then
+  echo "coact: checksum for $tarball not found" >&2
+  exit 1
+fi
+
+if command -v sha256sum >/dev/null 2>&1; then
+  actual=$(sha256sum "$tmp/$tarball" | awk '{print $1}')
+else
+  actual=$(shasum -a 256 "$tmp/$tarball" | awk '{print $1}')
+fi
+if [ "$actual" != "$expected" ]; then
+  echo "coact: checksum mismatch for $tarball" >&2
+  exit 1
+fi
+
+member=""
+for candidate in "$BINARY" "./$BINARY"; do
+  if tar -tzf "$tmp/$tarball" "$candidate" >/dev/null 2>&1; then
+    member="$candidate"
+    break
+  fi
+done
+if [ -z "$member" ]; then
+  echo "coact: archive does not contain $BINARY" >&2
+  exit 1
+fi
+tar -xOf "$tmp/$tarball" "$member" > "$tmp/$BINARY"
+chmod +x "$tmp/$BINARY"
 
 if [ -w "$INSTALL_DIR" ]; then
   mv "$tmp/$BINARY" "$INSTALL_DIR/$BINARY"
