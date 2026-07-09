@@ -91,7 +91,9 @@ func CodeRatio(s string) float64 {
 	return float64(codeBytes) / float64(len(trimmed))
 }
 
-// IsStructuredOutput detects pure JSON, XML, YAML-ish, or tool output blocks.
+// IsStructuredOutput detects machine-readable structured output. Markdown prose
+// lists are intentionally not treated as structured output because mixed
+// Chinese/English agent replies often use bullets and still benefit from polish.
 func IsStructuredOutput(s string) bool {
 	trimmed := strings.TrimSpace(s)
 	if trimmed == "" {
@@ -104,23 +106,53 @@ func IsStructuredOutput(s string) bool {
 	if strings.HasPrefix(trimmed, "<") && strings.HasSuffix(trimmed, ">") && strings.Contains(trimmed, "</") {
 		return true
 	}
-	lines := strings.Split(trimmed, "\n")
-	if len(lines) >= 2 {
-		structured := 0
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			if strings.HasPrefix(line, "---") || strings.Contains(line, ": ") || strings.HasPrefix(line, "-") {
-				structured++
-			}
-		}
-		if structured >= len(lines)*2/3 {
-			return true
-		}
+	lines := nonEmptyLines(trimmed)
+	if len(lines) >= 2 && looksLikeYAMLDocument(lines) {
+		return true
 	}
 	return false
+}
+
+func nonEmptyLines(s string) []string {
+	var lines []string
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
+}
+
+func looksLikeYAMLDocument(lines []string) bool {
+	if len(lines) == 0 {
+		return false
+	}
+	if strings.HasPrefix(lines[0], "---") {
+		return true
+	}
+	keyValues := 0
+	for _, line := range lines {
+		if yamlKeyValueLine(line) {
+			keyValues++
+		}
+	}
+	return keyValues >= 2 && keyValues >= len(lines)*2/3
+}
+
+func yamlKeyValueLine(line string) bool {
+	if strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") {
+		return false
+	}
+	idx := strings.Index(line, ":")
+	if idx <= 0 || idx > 48 {
+		return false
+	}
+	key := line[:idx]
+	if strings.ContainsAny(key, "。！？,.，；;()（）[]{}") {
+		return false
+	}
+	return idx == len(line)-1 || strings.HasPrefix(line[idx+1:], " ")
 }
 
 func explicitNoPolish(s string) bool {

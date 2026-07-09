@@ -91,3 +91,39 @@ func TestNoModelFallsBack(t *testing.T) {
 		t.Fatalf("expected no model fallback, got %#v", res)
 	}
 }
+
+func TestMixedChineseEnglishTechnicalTextTriggers(t *testing.T) {
+	cfg := testConfig()
+	raw := "这个 feature 的 goal 是让 Claude Code 和 Codex share memory，同时保持 native terminal workflow。实现时需要保护 `coact inbox`、API names、URL https://example.com/docs，以及 task ownership，不要改变技术结论。"
+	got := ShouldPolishChineseOutput("", raw, cfg)
+	if !got.ShouldRun || got.Reason != "enabled" {
+		t.Fatalf("mixed technical text should trigger, got %#v", got)
+	}
+}
+
+func TestMarkdownListIsNotStructuredOutput(t *testing.T) {
+	cfg := testConfig()
+	raw := "- 第一，run `coact plan` to start planning phase。\n- 第二，ask Codex to implement and Claude to review。\n- 第三，check https://example.com/status and keep final decision in `final-plan.md`。\n这个流程主要改善 coordination quality，而不是替代 agent CLI。"
+	got := ShouldPolishChineseOutput("", raw, cfg)
+	if !got.ShouldRun || got.Reason != "enabled" {
+		t.Fatalf("markdown prose list should trigger, got %#v", got)
+	}
+}
+
+func TestYAMLStillSkips(t *testing.T) {
+	cfg := testConfig()
+	raw := "name: coact\nsummary: 这是一个用于协调多个 agent 的工具\nenabled: true\nmode: shared"
+	got := ShouldPolishChineseOutput("", raw, cfg)
+	if got.ShouldRun || got.Reason != "structured_output" {
+		t.Fatalf("yaml should skip, got %#v", got)
+	}
+}
+
+func TestDisabledConfigSkips(t *testing.T) {
+	cfg := DisabledConfig()
+	raw := "这个 feature 的 goal 是让 Claude Code 和 Codex share memory，同时保持 native terminal workflow。实现时需要保护 `coact inbox`，不改变技术结论。"
+	got := ShouldPolishChineseOutput("", raw, cfg)
+	if got.ShouldRun || got.Reason != "disabled" {
+		t.Fatalf("disabled config should skip, got %#v", got)
+	}
+}

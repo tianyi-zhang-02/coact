@@ -1,6 +1,6 @@
 package expression
 
-// DefaultConfig is conservative: disabled and only runs on substantial Chinese text.
+// DefaultConfig is enabled by default and conservative about technical spans.
 func DefaultConfig() Config {
 	return Config{
 		Enabled: true,
@@ -9,7 +9,7 @@ func DefaultConfig() Config {
 		Locale:  LocaleZhCN,
 		Trigger: TriggerConfig{
 			UserLanguage:            []string{"zh"},
-			MinChineseRatio:         0.25,
+			MinChineseRatio:         0.10,
 			SkipIfShorterThan:       80,
 			SkipIfCodeRatioAbove:    0.45,
 			SkipForStructuredOutput: true,
@@ -35,7 +35,7 @@ func DefaultConfig() Config {
 	}
 }
 
-// DisabledConfig matches product default: the quality layer is opt-in.
+// DisabledConfig lets callers turn the quality layer off explicitly.
 func DisabledConfig() Config {
 	cfg := DefaultConfig()
 	cfg.Enabled = false

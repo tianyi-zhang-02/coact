@@ -110,8 +110,8 @@ they are journaled.
 
 ## Chinese expression quality layer
 
-CoAct includes an opt-in, model-agnostic Chinese expression adapter foundation.
-It is designed for future response pipelines: detect Chinese-heavy output,
+CoAct includes a default-on, model-agnostic Chinese expression adapter foundation.
+It is designed for future response pipelines: detect Chinese or mixed Chinese/English output,
 protect fragile technical spans such as code blocks, inline code, URLs, paths,
 and tables, build a constrained polish prompt, validate the polished result, and
 fallback to the raw output if anything looks unsafe.
@@ -121,12 +121,14 @@ itself:
 
 ```sh
 echo '这是一个强大的方式来处理这个问题。' | coact zh check
-echo '运行 `coact inbox` 后访问 https://example.com。' | coact zh check --diagnostics
+echo '这个 feature 的 goal 是让 Codex share memory，同时运行 `coact inbox`。' | coact zh check --diagnostics
+echo '这个 feature 的 goal 是让 Codex share memory，同时运行 `coact inbox`。' | coact zh check --off
 ```
 
-This layer is disabled unless a caller explicitly wires it into a response
-pipeline. It must not change facts, commands, code, URLs, API names, variables,
-or conclusions.
+This layer is enabled by default when a caller wires the response adapter into a
+pipeline, and can be turned off explicitly with `DisabledConfig()` or an
+equivalent user setting. It must not change facts, commands, code, URLs, API
+names, variables, or conclusions.
 
 ## Design
 

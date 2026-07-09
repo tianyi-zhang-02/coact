@@ -106,19 +106,20 @@ coact handoff codex "parser 改完了；测试还需要补。"
 
 ## 中文表达质量层
 
-CoAct 现在包含一个可选、模型无关的中文表达 adapter 基础层。它面向后续 response
-pipeline：检测中文占比较高的输出，保护代码块、inline code、URL、路径和表格等技术
+CoAct 现在包含一个默认开启、模型无关的中文表达 adapter 基础层。它面向后续 response
+pipeline：检测中文或中英混杂输出，保护代码块、inline code、URL、路径和表格等技术
 span，构造受约束的润色 prompt，校验润色结果；一旦不安全就回退到原始输出。
 
 第一版只暴露诊断能力，不会自己调用润色模型：
 
 ```sh
 echo '这是一个强大的方式来处理这个问题。' | coact zh check
-echo '运行 `coact inbox` 后访问 https://example.com。' | coact zh check --diagnostics
+echo '这个 feature 的 goal 是让 Codex share memory，同时运行 `coact inbox`。' | coact zh check --diagnostics
+echo '这个 feature 的 goal 是让 Codex share memory，同时运行 `coact inbox`。' | coact zh check --off
 ```
 
-这个层默认不会影响 agent 输出，只有调用方显式接入 response pipeline 才会运行。它不能
-改变事实、命令、代码、URL、API 名、变量名或结论。
+调用方把 response adapter 接入 pipeline 后，这个层默认开启；用户或集成方可以通过
+`DisabledConfig()` 或等价设置关闭。它不能改变事实、命令、代码、URL、API 名、变量名或结论。
 
 ## 设计
 

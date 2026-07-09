@@ -29,6 +29,7 @@ func cmdZHCheck(args []string) int {
 	fs := flag.NewFlagSet("zh check", flag.ContinueOnError)
 	userMessage := fs.String("user", "", "original user message for trigger detection")
 	diagnostics := fs.Bool("diagnostics", false, "print safe diagnostics")
+	off := fs.Bool("off", false, "disable the adapter for this check")
 	if _, err := parseInterspersed(fs, args); err != nil {
 		return 2
 	}
@@ -39,6 +40,9 @@ func cmdZHCheck(args []string) int {
 		return 1
 	}
 	cfg := expression.DefaultConfig()
+	if *off {
+		cfg.Enabled = false
+	}
 	cfg.Diagnostics = *diagnostics
 	detect := expression.ShouldPolishChineseOutput(*userMessage, text, cfg)
 	protected, spans := expression.ProtectSpans(text, cfg)
@@ -86,10 +90,11 @@ func printZHUsage() {
 	fmt.Print(`coact zh — Chinese expression adapter diagnostics.
 
 Usage:
-  coact zh check [--user "message"] [--diagnostics] [file]
+  coact zh check [--user "message"] [--diagnostics] [--off] [file]
 
-The adapter is model-agnostic. This command only reports whether a response
-should be polished and which technical spans would be protected; actual polish
-is supplied by a caller's response pipeline.
+The adapter is model-agnostic and enabled by default. Use --off to verify the
+explicit disable path. This command only reports whether a response should be
+polished and which technical spans would be protected; actual polish is supplied
+by a caller's response pipeline.
 `)
 }

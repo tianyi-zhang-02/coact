@@ -53,7 +53,7 @@ journal, status, worktree mode + merge gates, and real release.
 **Out (v0.2+):** embedded live terminals, UI model switching, deeper real-time
 mid-turn control, autopilot, release signing, visual/binary diffs, and automatic
 Chinese polishing inside provider pipelines. The v0.1 line includes the
-model-agnostic Chinese expression adapter foundation and CLI diagnostics only.
+default-on model-agnostic Chinese expression adapter foundation and CLI diagnostics only; callers can still disable it explicitly.
 Listed in the README as "coming" so the first release reads as scoped, not thin.
 
 ## v0.1.0 — Initial terminal-native coordination
@@ -72,8 +72,9 @@ The acceptance bar for the first public release:
    switches only the managed `~/.coact/coact` shim.
 6. Version descriptions show channel, stability, feature support, and notes so a
    user can choose stable/beta/experimental intentionally.
-7. `coact zh check` diagnoses the model-agnostic Chinese expression adapter
-   trigger/protection behavior without calling an external model.
+7. `coact zh check` diagnoses the default-on, model-agnostic Chinese expression
+   adapter trigger/protection behavior without calling an external model, and
+   `--off` verifies the explicit disable path.
 
 ## Day-by-day
 
