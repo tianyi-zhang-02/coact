@@ -11,6 +11,7 @@ import (
 
 	"github.com/tianyi-zhang-02/coact/internal/inbox"
 	"github.com/tianyi-zhang-02/coact/internal/journal"
+	"github.com/tianyi-zhang-02/coact/internal/lockmgr"
 	"github.com/tianyi-zhang-02/coact/internal/platform"
 	"github.com/tianyi-zhang-02/coact/internal/project"
 )
@@ -92,7 +93,7 @@ func cmdPlanStatus(args []string) int {
 	if err != nil {
 		return 2
 	}
-	p, _, ok := loadProject()
+	p, cfg, ok := loadProject()
 	if !ok {
 		return 1
 	}
@@ -120,6 +121,27 @@ func cmdPlanStatus(args []string) int {
 		matches, _ := filepath.Glob(filepath.Join(runDir, dir, "*.md"))
 		fmt.Printf("  %s: %d file(s)\n", dir, len(matches))
 	}
+	fmt.Println()
+	fmt.Println("proposal readiness:")
+	m := lockmgr.New(p, cfg)
+	locks, _ := m.List()
+	proposals, _ := filepath.Glob(filepath.Join(runDir, "proposals", "*.md"))
+	if len(proposals) == 0 {
+		fmt.Println("  (none)")
+	}
+	for _, proposal := range proposals {
+		agent := strings.TrimSuffix(filepath.Base(proposal), ".md")
+		status := proposalStatus(proposal)
+		lock := lockOwnerFor(locks, planRelPath(p, proposal))
+		if lock == "" {
+			lock = "unlocked"
+		} else {
+			lock = "locked by " + lock
+		}
+		fmt.Printf("  %-10s %-8s %s\n", agent, status, lock)
+	}
+	fmt.Println()
+	fmt.Println("final distributor should wait until all required proposals are ready and unlocked.")
 	return 0
 }
 
@@ -134,10 +156,12 @@ func writePlanFiles(p *project.Project, runDir, runID, brief, initiator, distrib
 
 1. Every planning agent reads .coact/team.md, .coact/memory/project.md, and this file.
 2. Every planning agent writes one proposal to .coact/runs/%s/proposals/<agent>.md.
-3. Every planning agent reads peer proposals and may add second-pass notes under .coact/runs/%s/notes/<agent>.md.
-4. The final distributor writes .coact/runs/%s/final-plan.md.
-5. The final distributor creates execution tasks with coact task add "..."
-6. Agents claim tasks before implementation with coact claim <id>.
+3. Every planning agent changes proposal Status from draft to ready and releases any lock on the proposal file.
+4. Every planning agent reads peer proposals and may add second-pass notes under .coact/runs/%s/notes/<agent>.md.
+5. The final distributor runs coact plan status %s and waits until all required proposals are ready and unlocked.
+6. The final distributor writes .coact/runs/%s/final-plan.md.
+7. The final distributor creates execution tasks with coact task add "..."
+8. Agents claim tasks before implementation with coact claim <id>.
 
 ## Metadata
 
@@ -146,7 +170,7 @@ func writePlanFiles(p *project.Project, runDir, runID, brief, initiator, distrib
 - final_task_distributor: %s
 - created_at: %s
 
-`, runID, brief, runID, runID, runID, initiator, strings.Join(participants, ", "), distributor, time.Now().UTC().Format(time.RFC3339))
+`, runID, brief, runID, runID, runID, runID, initiator, strings.Join(participants, ", "), distributor, time.Now().UTC().Format(time.RFC3339))
 	if err := platform.AtomicWrite(filepath.Join(runDir, "brief.md"), []byte(doc), 0o644); err != nil {
 		return err
 	}
@@ -155,9 +179,10 @@ func writePlanFiles(p *project.Project, runDir, runID, brief, initiator, distrib
 Status: pending
 Distributor: %s
 
+Do not finalize until coact plan status %s shows all required proposals are ready and unlocked.
 When proposals are ready, summarize the decision here and create board tasks.
 
-`, runID, distributor)
+`, runID, distributor, runID)
 	if err := platform.AtomicWrite(filepath.Join(runDir, "final-plan.md"), []byte(final), 0o644); err != nil {
 		return err
 	}
@@ -169,6 +194,9 @@ When proposals are ready, summarize the decision here and create board tasks.
 		template := fmt.Sprintf(`# Proposal: %s
 
 Run: %s
+Status: draft
+
+Change Status to ready when this proposal is complete, then release any lock on this file.
 
 ## Proposed approach
 
@@ -204,8 +232,49 @@ Write your proposal:
 Then read peer proposals. If you are the final distributor, write:
 - .coact/runs/%s/final-plan.md
 
+Before finalizing, run:
+- coact plan status %s
+
+Only finalize after all required proposals are ready and unlocked.
+
 After final planning, create/claim execution tasks through the board.
-`, runID, role, runID, runID, recipient, runID)
+`, runID, role, runID, runID, recipient, runID, runID)
+}
+
+func proposalStatus(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "missing"
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		key, value, ok := strings.Cut(line, ":")
+		if ok && strings.EqualFold(strings.TrimSpace(key), "status") {
+			status := strings.TrimSpace(value)
+			status = strings.ToLower(status)
+			if status == "" {
+				return "unknown"
+			}
+			return status
+		}
+	}
+	return "unknown"
+}
+
+func lockOwnerFor(locks []lockmgr.Lock, relPath string) string {
+	for _, lock := range locks {
+		if lock.Path == relPath {
+			return lock.Owner
+		}
+	}
+	return ""
+}
+
+func planRelPath(p *project.Project, path string) string {
+	if rel, err := filepath.Rel(p.Root, path); err == nil {
+		return rel
+	}
+	return path
 }
 
 func parseAgentList(raw string) []string {

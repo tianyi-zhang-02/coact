@@ -120,6 +120,13 @@ func TestPlanCreatesRunAndNotifiesParticipants(t *testing.T) {
 	if !strings.Contains(string(brief), "Build auth safely") || !strings.Contains(string(brief), "final_task_distributor: claude") {
 		t.Fatalf("unexpected brief:\n%s", string(brief))
 	}
+	proposal, err := os.ReadFile(filepath.Join(dir, ".coact", "runs", "r-001", "proposals", "claude.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(proposal), "Status: draft") {
+		t.Fatalf("proposal should start as draft:\n%s", string(proposal))
+	}
 	for _, agent := range []string{"codex", "claude"} {
 		data, err := os.ReadFile(filepath.Join(dir, ".coact", "inbox", agent+".md"))
 		if err != nil {
@@ -128,5 +135,18 @@ func TestPlanCreatesRunAndNotifiesParticipants(t *testing.T) {
 		if !strings.Contains(string(data), "Planning phase r-001 started") {
 			t.Fatalf("%s inbox missing plan notice:\n%s", agent, string(data))
 		}
+		if !strings.Contains(string(data), "coact plan status r-001") {
+			t.Fatalf("%s inbox missing plan status readiness instruction:\n%s", agent, string(data))
+		}
+	}
+}
+
+func TestProposalStatusParsesCaseInsensitively(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "proposal.md")
+	if err := os.WriteFile(path, []byte("STATUS: Ready\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := proposalStatus(path); got != "ready" {
+		t.Fatalf("proposalStatus = %q, want ready", got)
 	}
 }

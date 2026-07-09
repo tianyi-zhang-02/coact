@@ -78,7 +78,8 @@ coact plan status
 Planning files live under `.coact/runs/<run>/`:
 
 - `brief.md` — human/task brief
-- `proposals/<agent>.md` — each agent's independent plan
+- `proposals/<agent>.md` — each agent's independent plan; change `Status: draft`
+  to `Status: ready` when complete
 - `notes/<agent>.md` — optional second-pass notes after reading peers
 - `final-plan.md` — distributor's execution decision
 

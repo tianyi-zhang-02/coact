@@ -76,7 +76,8 @@ coact plan status
 planning 文件位于 `.coact/runs/<run>/`：
 
 - `brief.md`：人类/任务 brief
-- `proposals/<agent>.md`：每个 agent 的独立方案
+- `proposals/<agent>.md`：每个 agent 的独立方案；完成后把 `Status: draft`
+  改成 `Status: ready`
 - `notes/<agent>.md`：读取彼此方案后的 second-pass notes
 - `final-plan.md`：distributor 的最终执行决策
 
