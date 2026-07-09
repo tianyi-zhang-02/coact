@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -94,7 +95,7 @@ func runWrapped(p *project.Project, cfg *config.Config, agent, bin string, args 
 	}()
 
 	cmd := exec.Command(bin, args...)
-	cmd.Env = append(os.Environ(), "COACT_AGENT="+agent)
+	cmd.Env = coactAgentEnv(os.Environ(), agent)
 	if workdir != "" {
 		cmd.Dir = workdir
 	}
@@ -133,4 +134,44 @@ func runWrapped(p *project.Project, cfg *config.Config, agent, bin string, args 
 		return 1
 	}
 	return 0
+}
+
+func coactAgentEnv(base []string, agent string) []string {
+	env := append([]string{}, base...)
+	env = setEnv(env, "COACT_AGENT", agent)
+	if exe, err := os.Executable(); err == nil && exe != "" {
+		if abs, err := filepath.Abs(exe); err == nil {
+			exe = abs
+		}
+		env = setEnv(env, "COACT_BIN", exe)
+		if dir := filepath.Dir(exe); dir != "." && dir != "" {
+			env = prependPath(env, dir)
+		}
+	}
+	return env
+}
+
+func setEnv(env []string, key, value string) []string {
+	prefix := key + "="
+	for i, item := range env {
+		if len(item) >= len(prefix) && item[:len(prefix)] == prefix {
+			env[i] = prefix + value
+			return env
+		}
+	}
+	return append(env, prefix+value)
+}
+
+func prependPath(env []string, dir string) []string {
+	for i, item := range env {
+		if len(item) >= len("PATH=") && item[:len("PATH=")] == "PATH=" {
+			if item == "PATH=" {
+				env[i] = "PATH=" + dir
+			} else {
+				env[i] = "PATH=" + dir + string(os.PathListSeparator) + item[len("PATH="):]
+			}
+			return env
+		}
+	}
+	return append(env, "PATH="+dir)
 }

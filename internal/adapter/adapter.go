@@ -47,6 +47,8 @@ const coordinate = `Coordinate with the other agents in this repo:
 - Talk directly through the local inbox: run "coact inbox" at the start of each
   turn; send with "coact @codex \"...\"", "coact @claude \"...\"", or
   "coact @all \"...\""; and use "coact handoff <agent> \"context\"" if you stop.
+- The coact launcher injects COACT_BIN and prepends its directory to PATH. If
+  "coact" is unavailable in a shell, run "$COACT_BIN inbox" / "$COACT_BIN status".
 - Planning phases live under ".coact/runs/<run>/"; write proposals there, read
   peer proposals, then let the configured final_task_distributor create tasks.
 - "coact status" and "coact log" show the shared picture.`

@@ -63,8 +63,10 @@ coact gemini
 ```
 
 The launchers set `COACT_AGENT`, keep presence alive, and release session locks
-on exit. You can also run the agent CLIs manually as long as they follow the
-repo contract files.
+on exit. They also expose `COACT_BIN` and prepend the running CoAct binary's
+directory to `PATH`, so agents can run `coact inbox` even when CoAct was launched
+by absolute path. You can also run the agent CLIs manually as long as they follow
+the repo contract files.
 
 ### 3. Plan together
 

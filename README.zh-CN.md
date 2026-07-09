@@ -62,7 +62,9 @@ coact gemini
 ```
 
 launcher 会设置 `COACT_AGENT`、保持 presence，并在退出时释放本 session 的锁。
-你也可以手动运行 agent CLI，只要它遵守仓库里的 contract 文件。
+它也会设置 `COACT_BIN`，并把当前 CoAct binary 所在目录放到 `PATH` 前面，所以即使用
+绝对路径启动，agent 也能运行 `coact inbox`。你也可以手动运行 agent CLI，只要它遵守
+仓库里的 contract 文件。
 
 ### 3. 一起规划
 

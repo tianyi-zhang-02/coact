@@ -5,6 +5,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/tianyi-zhang-02/coact/internal/config"
@@ -50,5 +51,26 @@ func TestRunWrappedPropagatesExitCode(t *testing.T) {
 	cfg, _ := config.Load(p.ConfigPath())
 	if code := runWrapped(p, cfg, "claude", writeStub(t, "#!/bin/sh\nexit 7\n"), nil, ""); code != 7 {
 		t.Fatalf("want exit code 7, got %d", code)
+	}
+}
+
+func TestCoactAgentEnvExposesCurrentBinary(t *testing.T) {
+	env := coactAgentEnv([]string{"PATH=/usr/bin", "COACT_AGENT=old"}, "codex")
+	got := map[string]string{}
+	for _, item := range env {
+		if k, v, ok := strings.Cut(item, "="); ok {
+			got[k] = v
+		}
+	}
+	if got["COACT_AGENT"] != "codex" {
+		t.Fatalf("COACT_AGENT = %q, want codex", got["COACT_AGENT"])
+	}
+	if got["COACT_BIN"] == "" {
+		t.Fatal("COACT_BIN should point at the current coact binary")
+	}
+	binDir := filepath.Dir(got["COACT_BIN"])
+	pathParts := strings.Split(got["PATH"], string(os.PathListSeparator))
+	if len(pathParts) == 0 || pathParts[0] != binDir {
+		t.Fatalf("PATH should start with current binary dir %q, got %q", binDir, got["PATH"])
 	}
 }
