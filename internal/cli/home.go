@@ -57,7 +57,13 @@ func cmdHome() int {
 	}
 
 	sessions, _ := presence.List(p.SessionDir())
-	fmt.Printf("agents: %d known session(s)\n", len(sessions))
+	live := 0
+	for _, session := range sessions {
+		if presence.IsLive(p.SessionDir(), session.Agent, presence.DefaultTTLSeconds) {
+			live++
+		}
+	}
+	fmt.Printf("agents: %d live / %d known session(s)\n", live, len(sessions))
 	fmt.Println()
 	fmt.Println("next commands:")
 	fmt.Println("  coact inbox")
@@ -65,6 +71,8 @@ func cmdHome() int {
 	fmt.Println("  coact plan --with codex,claude --distributor codex \"brief\"")
 	fmt.Println("  coact board")
 	fmt.Println("  coact status")
+	fmt.Println("  coact usage report")
+	fmt.Println("  coact eval report")
 	return 0
 }
 

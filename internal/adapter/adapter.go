@@ -51,6 +51,9 @@ const coordinate = `Coordinate with the other agents in this repo:
   "coact" is unavailable in a shell, run "$COACT_BIN inbox" / "$COACT_BIN status".
 - Planning phases live under ".coact/runs/<run>/"; write proposals there, read
   peer proposals, then let the configured final_task_distributor create tasks.
+- If a provider or human records quota usage, inspect it with "coact usage report".
+- After a run, rate a workmate with "coact eval rate"; the human can generate
+  an evidence-labeled summary with "coact eval report <run>".
 - "coact status" and "coact log" show the shared picture.`
 
 // Contract returns the collaboration contract injected into the agent's context

@@ -43,7 +43,7 @@ func Initialize(root, agent string) (*Result, error) {
 	p := &project.Project{Root: root, CheckoutRoot: root}
 	for _, d := range []string{
 		p.CoactDir(), p.LocksDir(), p.SessionDir(), p.InboxDir(), p.JournalDir(),
-		p.MemoryDir(), p.RunsDir(),
+		p.MemoryDir(), p.RunsDir(), p.UsageDir(), p.EvaluationDir(),
 	} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return nil, fmt.Errorf("creating %s: %w", d, err)
@@ -115,11 +115,34 @@ func Initialize(root, agent string) (*Result, error) {
 }
 
 func migrateProtectedPaths(cfg *config.Config) bool {
-	if cfg == nil || len(cfg.Policy.ProtectedPaths) != 1 || cfg.Policy.ProtectedPaths[0] != ".coact/**" {
+	if cfg == nil {
 		return false
 	}
-	cfg.Policy.ProtectedPaths = config.Default().Policy.ProtectedPaths
-	return true
+	changed := false
+	if len(cfg.Policy.ProtectedPaths) == 1 && cfg.Policy.ProtectedPaths[0] == ".coact/**" {
+		cfg.Policy.ProtectedPaths = append([]string(nil), config.Default().Policy.ProtectedPaths...)
+		changed = true
+	}
+	for _, required := range config.Default().Policy.ProtectedPaths {
+		if !contains(cfg.Policy.ProtectedPaths, required) {
+			cfg.Policy.ProtectedPaths = append(cfg.Policy.ProtectedPaths, required)
+			changed = true
+		}
+	}
+	if cfg.Version != config.Default().Version {
+		cfg.Version = config.Default().Version
+		changed = true
+	}
+	return changed
+}
+
+func contains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func exists(path string) bool {
@@ -141,8 +164,18 @@ func ensureMarkedBlock(path, body string) (bool, error) {
 	} else if !os.IsNotExist(err) {
 		return false, err
 	}
-	if strings.Contains(content, coactBegin) {
-		return false, nil
+	block := coactBegin + "\n" + strings.TrimRight(body, "\n") + "\n" + coactEnd
+	if start := strings.Index(content, coactBegin); start >= 0 {
+		endRel := strings.Index(content[start:], coactEnd)
+		if endRel < 0 {
+			return false, fmt.Errorf("coact contract block in %s is missing %s", path, coactEnd)
+		}
+		end := start + endRel + len(coactEnd)
+		updated := content[:start] + block + content[end:]
+		if updated == content {
+			return false, nil
+		}
+		return true, platform.AtomicWrite(path, []byte(updated), 0o644)
 	}
 	var b strings.Builder
 	b.WriteString(content)
@@ -152,9 +185,7 @@ func ensureMarkedBlock(path, body string) (bool, error) {
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString(coactBegin + "\n")
-	b.WriteString(strings.TrimRight(body, "\n") + "\n")
-	b.WriteString(coactEnd + "\n")
+	b.WriteString(block + "\n")
 	return true, platform.AtomicWrite(path, []byte(b.String()), 0o644)
 }
 
@@ -266,7 +297,7 @@ func coactBinary() string {
 func ensureGitignore(root string) {
 	path := filepath.Join(root, ".gitignore")
 	needed := []string{
-		".coact/locks/", ".coact/session/", ".coact/journal/", ".coact/inbox/", ".coact/terminal/", ".coact/runs/", ".coact/memory/",
+		".coact/locks/", ".coact/session/", ".coact/journal/", ".coact/inbox/", ".coact/terminal/", ".coact/runs/", ".coact/memory/", ".coact/usage/", ".coact/evaluations/",
 	}
 	var content string
 	if data, err := os.ReadFile(path); err == nil {

@@ -48,10 +48,11 @@ removes `.coact/` (and refuses to `RemoveAll` any directory not named `.coact`).
   with an L2 agent on a shared tree lowers the shared-resource guarantee to L1;
   worktree isolation (roadmap) is the answer as lower-tier agents join.
 
-## Local control center (`coact ui`)
+## Optional local control center (`coact ui`)
 
-`coact` with no arguments (and `coact ui`) starts a **local-only** web control
-center. Because a browser can reach any localhost server, binding to loopback is
+The default `coact` command prints a terminal workspace summary. The optional
+`coact ui` command starts a **local-only** web control center. Because a browser
+can reach any localhost server, binding to loopback is
 necessary but not sufficient; the server adds two defenses:
 
 - **Loopback bind + Host-header allowlist.** It listens only on
@@ -65,9 +66,30 @@ necessary but not sufficient; the server adds two defenses:
   Read-only GETs are exempt: the same-origin policy already protects their
   bodies, and they change nothing.
 
-The UI executes **no arbitrary shell** — every action reuses the same governed
-primitives as the CLI (locks, policy, board, inbox, journal) and is journaled. It
+The UI accepts **no arbitrary shell input**. Mutations reuse governed CLI
+primitives and are journaled; the macOS-only launch action can start only a
+built-in, installed agent adapter using fixed argument construction. The server
 refreshes by polling and opens no outbound connections.
+
+Terminal transcripts can contain prompts, source code, or accidentally printed
+credentials. CoAct stores them only under the gitignored `.coact/terminal/`
+directory. Treat that directory as sensitive local data and delete it before
+sharing a workspace archive.
+
+## Usage and collaboration reports
+
+Quota snapshots and peer ratings are local decision-support data under
+`.coact/usage/` and `.coact/evaluations/`. Both directories are gitignored,
+written with owner-only file permissions where supported, path-safe, and
+protected from direct agent edits by policy.
+
+- CoAct does not log in to providers or scrape private account pages. A human or
+  adapter explicitly supplies usage values and refresh times.
+- Threshold notifications contain percentages, model labels, and refresh times,
+  not credentials or raw prompts.
+- Collaboration reports label journal-derived facts separately from subjective
+  peer ratings. They must not be treated as an objective model benchmark.
+- Rating notes are length-limited but human-authored; do not put secrets in them.
 
 ## Managed updates (`coact update`)
 
@@ -81,6 +103,8 @@ repository.
   the binary by base name (`coact`/`coact.exe`) and writes to a fixed
   `~/.coact/bin/coact-<version>` path, so a hostile archive cannot escape via
   `../` entries ("zip-slip").
+- Manifest, archive, and extracted-binary sizes are bounded to reduce memory,
+  disk-exhaustion, and decompression-bomb risk; redirects must remain HTTPS.
 - It **never overwrites a system install** — it only re-points the managed
   `~/.coact/coact` shim, and only when the running binary is itself managed.
 - Checksums verify **integrity, not authenticity**: there is not yet a
@@ -102,6 +126,8 @@ repository.
   `.coact/session/`; every `Remove`/`RemoveAll` is bounded to `.coact/`.
 - **Atomic, auditable state.** All state is written atomically (temp + rename)
   and is plain text; every significant action is appended to the journal.
+- **Concurrent local reports.** Usage snapshots and peer ratings use local
+  meta-locks; shared threshold history is separately serialized.
 
 ## Auditing and removing
 

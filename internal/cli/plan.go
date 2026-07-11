@@ -20,6 +20,9 @@ func cmdPlan(args []string) int {
 	if len(args) > 0 && args[0] == "status" {
 		return cmdPlanStatus(args[1:])
 	}
+	if len(args) > 0 && args[0] == "ready" {
+		return cmdPlanReady(args[1:])
+	}
 
 	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
 	agentFlag := fs.String("agent", "", "initiator id")
@@ -84,6 +87,64 @@ func cmdPlan(args []string) int {
 	fmt.Printf("brief: .coact/runs/%s/brief.md\n", runID)
 	fmt.Printf("participants: %s\n", strings.Join(participants, ", "))
 	fmt.Printf("final distributor: %s\n", distributor)
+	return 0
+}
+
+func cmdPlanReady(args []string) int {
+	fs := flag.NewFlagSet("plan ready", flag.ContinueOnError)
+	agentFlag := fs.String("agent", "", "planning agent id")
+	positionals, err := parseInterspersed(fs, args)
+	if err != nil || len(positionals) > 1 {
+		fmt.Fprintln(os.Stderr, "usage: coact plan ready [--agent id] [run-id]")
+		return 2
+	}
+	p, cfg, ok := loadProject()
+	if !ok {
+		return 1
+	}
+	runID := ""
+	if len(positionals) == 1 {
+		runID = safeRunID(positionals[0])
+	} else {
+		runID = latestRunID(p)
+	}
+	if runID == "" {
+		fmt.Fprintln(os.Stderr, "coact plan ready: no planning run found")
+		return 1
+	}
+	agent := agentID(*agentFlag)
+	proposal := filepath.Join(p.RunsDir(), runID, "proposals", agent+".md")
+	if _, err := os.Stat(proposal); err != nil {
+		fmt.Fprintf(os.Stderr, "coact plan ready: no proposal for %s in %s\n", agent, runID)
+		return 1
+	}
+	m := lockmgr.New(p, cfg)
+	result, err := m.Acquire(agent, proposal)
+	if err != nil || !result.Acquired {
+		detail := "proposal lock denied"
+		if err != nil {
+			detail = err.Error()
+		} else if result.Detail != "" {
+			detail = result.Detail
+		}
+		fmt.Fprintf(os.Stderr, "coact plan ready: %s\n", detail)
+		return 1
+	}
+	if err := setProposalStatus(proposal, "ready"); err != nil {
+		_ = m.Release(agent, proposal)
+		fmt.Fprintf(os.Stderr, "coact plan ready: %v\n", err)
+		return 1
+	}
+	if err := m.Release(agent, proposal); err != nil {
+		fmt.Fprintf(os.Stderr, "coact plan ready: marked ready but could not release lock: %v\n", err)
+		return 1
+	}
+	distributor := planDistributor(filepath.Join(p.RunsDir(), runID, "brief.md"))
+	if distributor != "" && distributor != agent {
+		_ = inbox.Send(p.InboxDir(), agent, distributor, fmt.Sprintf("Proposal ready: .coact/runs/%s/proposals/%s.md. Run `coact plan status %s` before finalizing.", runID, agent, runID))
+	}
+	_ = journal.Append(p.JournalDir(), agent, "plan.ready", map[string]string{"id": runID})
+	fmt.Printf("proposal ready: %s (%s)\n", runID, agent)
 	return 0
 }
 
@@ -156,7 +217,7 @@ func writePlanFiles(p *project.Project, runDir, runID, brief, initiator, distrib
 
 1. Every planning agent reads .coact/team.md, .coact/memory/project.md, and this file.
 2. Every planning agent writes one proposal to .coact/runs/%s/proposals/<agent>.md.
-3. Every planning agent changes proposal Status from draft to ready and releases any lock on the proposal file.
+3. Every planning agent runs coact plan ready %s after finishing its proposal; this marks it ready and releases the command's lock.
 4. Every planning agent reads peer proposals and may add second-pass notes under .coact/runs/%s/notes/<agent>.md.
 5. The final distributor runs coact plan status %s and waits until all required proposals are ready and unlocked.
 6. The final distributor writes .coact/runs/%s/final-plan.md.
@@ -170,7 +231,7 @@ func writePlanFiles(p *project.Project, runDir, runID, brief, initiator, distrib
 - final_task_distributor: %s
 - created_at: %s
 
-`, runID, brief, runID, runID, runID, runID, initiator, strings.Join(participants, ", "), distributor, time.Now().UTC().Format(time.RFC3339))
+`, runID, brief, runID, runID, runID, runID, runID, initiator, strings.Join(participants, ", "), distributor, time.Now().UTC().Format(time.RFC3339))
 	if err := platform.AtomicWrite(filepath.Join(runDir, "brief.md"), []byte(doc), 0o644); err != nil {
 		return err
 	}
@@ -196,7 +257,7 @@ When proposals are ready, summarize the decision here and create board tasks.
 Run: %s
 Status: draft
 
-Change Status to ready when this proposal is complete, then release any lock on this file.
+When complete, run: coact plan ready %s
 
 ## Proposed approach
 
@@ -204,7 +265,7 @@ Change Status to ready when this proposal is complete, then release any lock on 
 
 ## Suggested tasks
 
-`, agent, runID)
+`, agent, runID, runID)
 		if err := platform.AtomicWrite(path, []byte(template), 0o644); err != nil {
 			return err
 		}
@@ -229,6 +290,9 @@ Read:
 Write your proposal:
 - .coact/runs/%s/proposals/%s.md
 
+When complete:
+- coact plan ready %s
+
 Then read peer proposals. If you are the final distributor, write:
 - .coact/runs/%s/final-plan.md
 
@@ -238,7 +302,42 @@ Before finalizing, run:
 Only finalize after all required proposals are ready and unlocked.
 
 After final planning, create/claim execution tasks through the board.
-`, runID, role, runID, runID, recipient, runID, runID)
+`, runID, role, runID, runID, recipient, runID, runID, runID)
+}
+
+func setProposalStatus(path, status string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(data), "\n")
+	found := false
+	for index, line := range lines {
+		key, _, ok := strings.Cut(strings.TrimSpace(line), ":")
+		if ok && strings.EqualFold(strings.TrimSpace(key), "status") {
+			lines[index] = "Status: " + status
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("proposal is missing a Status field")
+	}
+	return platform.AtomicWrite(path, []byte(strings.Join(lines, "\n")), 0o644)
+}
+
+func planDistributor(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "-"))
+		if key, value, ok := strings.Cut(line, ":"); ok && strings.EqualFold(strings.TrimSpace(key), "final_task_distributor") {
+			return sanitizeAgent(value)
+		}
+	}
+	return ""
 }
 
 func proposalStatus(path string) string {

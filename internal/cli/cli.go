@@ -36,6 +36,10 @@ func Run(args []string) int {
 		return cmdAdapters(rest)
 	case "zh":
 		return cmdZH(rest)
+	case "usage":
+		return cmdUsage(rest)
+	case "eval":
+		return cmdEval(rest)
 	case "worktree":
 		return cmdWorktree(rest)
 	case "merge":
@@ -161,6 +165,8 @@ Commands:
   gemini [args]    Launch Gemini CLI wired into coact
   adapters         List the agents coact can coordinate
   zh check         Diagnose the Chinese expression adapter trigger/protection
+  usage            Track quota windows and 20% threshold alerts (set | report | alerts)
+  eval             Record peer ratings and build collaboration reports (rate | report)
   worktree         Manage per-agent git worktrees (add | list | rm)
   merge <agent>    Merge an agent's coact/<agent> branch (stops on conflict)
   status           Show live participants and active locks
@@ -171,7 +177,7 @@ Commands:
   done <id>        Mark a claimed task done
   @agent <text>    Send an inbox message, e.g. coact @claude "please review"
   @all <text>      Broadcast an inbox message to all built-in agents
-  plan "<brief>"   Start a planning phase under .coact/runs/<run>/
+  plan "<brief>"   Start planning; use plan ready/status to coordinate completion
   msg <to> <text>  Send a message to another agent
   inbox            Read your messages from other agents
   handoff <to>     Hand your tasks + context to another agent
@@ -199,6 +205,8 @@ Examples:
   coact sidecar &          # keep this session live
   coact @codex "please review my proposal"
   coact plan --with codex,claude --distributor codex "Build the auth module"
+  coact usage set --agent claude --percent 40 --refresh-in 7d
+  coact eval rate --peer claude --score 4 --note "clear review"
   coact task add "Add rate limiting"
   coact claim T-001
   coact lock src/api

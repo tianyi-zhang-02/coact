@@ -19,18 +19,20 @@ type Project struct {
 	CheckoutRoot string
 }
 
-func (p *Project) CoactDir() string    { return filepath.Join(p.Root, ".coact") }
-func (p *Project) LocksDir() string    { return filepath.Join(p.CoactDir(), "locks") }
-func (p *Project) SessionDir() string  { return filepath.Join(p.CoactDir(), "session") }
-func (p *Project) InboxDir() string    { return filepath.Join(p.CoactDir(), "inbox") }
-func (p *Project) JournalDir() string  { return filepath.Join(p.CoactDir(), "journal") }
-func (p *Project) AdaptersDir() string { return filepath.Join(p.CoactDir(), "adapters") }
-func (p *Project) MemoryDir() string   { return filepath.Join(p.CoactDir(), "memory") }
-func (p *Project) RunsDir() string     { return filepath.Join(p.CoactDir(), "runs") }
-func (p *Project) ConfigPath() string  { return filepath.Join(p.CoactDir(), "config.json") }
-func (p *Project) BoardPath() string   { return filepath.Join(p.CoactDir(), "board.md") }
-func (p *Project) BriefPath() string   { return filepath.Join(p.CoactDir(), "brief.md") }
-func (p *Project) TeamPath() string    { return filepath.Join(p.CoactDir(), "team.md") }
+func (p *Project) CoactDir() string      { return filepath.Join(p.Root, ".coact") }
+func (p *Project) LocksDir() string      { return filepath.Join(p.CoactDir(), "locks") }
+func (p *Project) SessionDir() string    { return filepath.Join(p.CoactDir(), "session") }
+func (p *Project) InboxDir() string      { return filepath.Join(p.CoactDir(), "inbox") }
+func (p *Project) JournalDir() string    { return filepath.Join(p.CoactDir(), "journal") }
+func (p *Project) AdaptersDir() string   { return filepath.Join(p.CoactDir(), "adapters") }
+func (p *Project) MemoryDir() string     { return filepath.Join(p.CoactDir(), "memory") }
+func (p *Project) RunsDir() string       { return filepath.Join(p.CoactDir(), "runs") }
+func (p *Project) UsageDir() string      { return filepath.Join(p.CoactDir(), "usage") }
+func (p *Project) EvaluationDir() string { return filepath.Join(p.CoactDir(), "evaluations") }
+func (p *Project) ConfigPath() string    { return filepath.Join(p.CoactDir(), "config.json") }
+func (p *Project) BoardPath() string     { return filepath.Join(p.CoactDir(), "board.md") }
+func (p *Project) BriefPath() string     { return filepath.Join(p.CoactDir(), "brief.md") }
+func (p *Project) TeamPath() string      { return filepath.Join(p.CoactDir(), "team.md") }
 
 // WorkRoot is the checkout where user paths should be interpreted. For the main
 // worktree this is Root; for linked worktrees it is the linked checkout while

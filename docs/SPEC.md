@@ -28,6 +28,8 @@ This spec is the design target. What ships today:
 | §7 Config | built | `internal/config` |
 | §8 Enforcement L0/L1/L2 | built | Claude L2 hook, Codex L1 contract, `internal/policy` capability gating |
 | §9 Worktree mode | built (basic) | `coact worktree` + `coact merge`, shared-state resolution |
+| Usage windows | built (provider-independent) | `internal/usage` + `coact usage` |
+| Collaboration reports | built (decision support) | `internal/evaluation` + `coact eval` |
 
 Where the implementation currently diverges from the text below:
 
@@ -76,6 +78,8 @@ All coordination state lives under `.coact/` at the repository root.
     <agent>.md
   journal/               # append-only activity log (gitignored)
     YYYY-MM-DD.jsonl
+  usage/                 # local provider quota snapshots + alerts (gitignored)
+  evaluations/           # local peer ratings + reports (gitignored)
 ```
 
 `config.yaml` and `board.md` are committed (shared intent). `locks/`,

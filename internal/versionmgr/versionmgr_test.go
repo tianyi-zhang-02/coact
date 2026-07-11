@@ -1,12 +1,32 @@
 package versionmgr
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestReleaseManifestCopyMatchesBundledProductDescription(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "release", "coact_manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var release Manifest
+	if err := json.Unmarshal(data, &release); err != nil {
+		t.Fatal(err)
+	}
+	bundled := BundledManifest()
+	if bundled == nil {
+		t.Fatal("bundled manifest did not parse")
+	}
+	if release.Summary != bundled.Summary || strings.Join(release.Notes, "\n") != strings.Join(bundled.Notes, "\n") {
+		t.Fatalf("release and bundled product descriptions drifted")
+	}
+}
 
 func TestParseManifestAndSelectAsset(t *testing.T) {
 	data := []byte(`{
@@ -145,5 +165,15 @@ func TestDownloadToTempRejectsNonHTTPS(t *testing.T) {
 	}
 	if _, err := getBytes(nil, "file:///tmp/coact_manifest.json"); err == nil {
 		t.Fatal("getBytes should reject non-HTTPS release URLs")
+	}
+}
+
+func TestLimitedReadersRejectOversizedInput(t *testing.T) {
+	if _, err := readLimited(strings.NewReader("12345"), 4); err == nil {
+		t.Fatal("readLimited should reject oversized metadata")
+	}
+	var out bytes.Buffer
+	if _, err := copyLimited(&out, strings.NewReader("12345"), 4); err == nil {
+		t.Fatal("copyLimited should reject oversized payload")
 	}
 }
