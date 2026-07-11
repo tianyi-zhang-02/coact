@@ -2,6 +2,8 @@
 
 Reviewed: 2026-07-10
 
+Release baseline: `v1.0.0`
+
 “Ready” means the feature has an implemented CLI path, automated tests, a
 documented safety boundary, and a graceful failure mode. It does not mean every
 agent adapter has identical enforcement strength.

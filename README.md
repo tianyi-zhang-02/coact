@@ -17,7 +17,7 @@ trail. It does not replace an agent CLI or model provider.
 Install CoAct on your `PATH`, then initialize a repository once:
 
 ```sh
-go install github.com/tianyi-zhang-02/coact/cmd/coact@main
+go install github.com/tianyi-zhang-02/coact/cmd/coact@v1.0.0
 cd your-project
 coact init
 coact doctor
@@ -49,8 +49,7 @@ coact status
 The launcher sets `COACT_AGENT`, `COACT_BIN`, and `PATH`, so an agent launched
 with `/some/path/coact codex` can still run bare `coact inbox`.
 
-`@main` installs the reviewed development build described here. Use a tagged
-version when the corresponding GitHub release is published.
+`v1.0.0` is the first stable terminal-native coordination release.
 
 ## The normal workflow
 
