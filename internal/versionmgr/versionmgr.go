@@ -19,6 +19,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/tianyi-zhang-02/coact/internal/platform"
 )
 
 // Manifest describes one published coact release.
@@ -222,6 +224,10 @@ func LocalVersions(home string) []LocalInfo {
 		return nil
 	}
 	active := activeTarget(home)
+	activeVersion := ""
+	if runtime.GOOS == "windows" {
+		activeVersion = copiedActiveVersion(home)
+	}
 	var out []LocalInfo
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -236,10 +242,14 @@ func LocalVersions(home string) []LocalInfo {
 		}
 		path := filepath.Join(BinDir(home), entry.Name())
 		abs, _ := filepath.Abs(path)
+		isActive := active != "" && abs == active
+		if runtime.GOOS == "windows" {
+			isActive = activeVersion != "" && strings.TrimPrefix(name, "coact-") == activeVersion
+		}
 		out = append(out, LocalInfo{
 			Version: strings.TrimPrefix(name, "coact-"),
 			Path:    path,
-			Active:  active != "" && abs == active,
+			Active:  isActive,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -266,7 +276,10 @@ func Switch(home, version string) error {
 
 	link := LinkPath(home)
 	if runtime.GOOS == "windows" {
-		return copyFile(target, link, 0o755)
+		if err := copyFile(target, link, 0o755); err != nil {
+			return err
+		}
+		return writeActiveVersion(home, version)
 	}
 	absTarget, err := filepath.Abs(target)
 	if err != nil {
@@ -738,4 +751,82 @@ func activeTarget(home string) string {
 	}
 	abs, _ := filepath.Abs(target)
 	return abs
+}
+
+func activeVersionPath(home string) string {
+	return filepath.Join(home, "active-version")
+}
+
+func writeActiveVersion(home, version string) error {
+	if err := validateVersion(version); err != nil {
+		return err
+	}
+	return platform.AtomicWrite(activeVersionPath(home), []byte(version+"\n"), 0o600)
+}
+
+// copiedActiveVersion resolves the active version where the managed shim is a
+// copied executable instead of a symlink. It validates the marker against the
+// shim bytes and falls back to content matching for pre-marker installations.
+func copiedActiveVersion(home string) string {
+	link := LinkPath(home)
+	if data, err := os.ReadFile(activeVersionPath(home)); err == nil {
+		version := strings.TrimSpace(string(data))
+		if validateVersion(version) == nil {
+			target := filepath.Join(BinDir(home), BinaryName(version))
+			if sameFileContents(link, target) {
+				return version
+			}
+		}
+	}
+	entries, err := os.ReadDir(BinDir(home))
+	if err != nil {
+		return ""
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if runtime.GOOS == "windows" {
+			name = strings.TrimSuffix(name, ".exe")
+		}
+		if !strings.HasPrefix(name, "coact-") {
+			continue
+		}
+		if sameFileContents(link, filepath.Join(BinDir(home), entry.Name())) {
+			return strings.TrimPrefix(name, "coact-")
+		}
+	}
+	return ""
+}
+
+func sameFileContents(left, right string) bool {
+	leftInfo, err := os.Stat(left)
+	if err != nil {
+		return false
+	}
+	rightInfo, err := os.Stat(right)
+	if err != nil || leftInfo.Size() != rightInfo.Size() {
+		return false
+	}
+	leftHash, err := fileSHA256(left)
+	if err != nil {
+		return false
+	}
+	rightHash, err := fileSHA256(right)
+	return err == nil && leftHash == rightHash
+}
+
+func fileSHA256(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
