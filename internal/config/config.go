@@ -48,7 +48,7 @@ type PolicyConfig struct {
 // Default returns the built-in configuration used by `coact init`.
 func Default() *Config {
 	return &Config{
-		Version: "0.1",
+		Version: "0.2",
 		Mode:    "shared",
 		Agents: []AgentConfig{
 			{ID: "claude", Adapter: "claude-code"},
@@ -79,6 +79,8 @@ func Default() *Config {
 				".coact/journal/**",
 				".coact/inbox/**",
 				".coact/terminal/**",
+				".coact/usage/**",
+				".coact/evaluations/**",
 			},
 		},
 	}

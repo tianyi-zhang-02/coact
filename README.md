@@ -2,204 +2,209 @@
 
 **English** · [中文](README.zh-CN.md)
 
-**Terminal-native coordination for multiple coding agents in one repository.**
+<img src="assets/mascot/icon.png" alt="CoBot, the CoAct robot astronaut" width="140">
 
-CoAct lets Claude Code, Codex, Gemini, and other coding agents work in the same
-project without copying context by hand or overwriting each other. Agents keep
-using their native terminals. CoAct provides the shared coordination layer:
-team policy, project memory, planning runs, task ownership, inbox messages,
-write-intent locks, policy checks, and an audit journal.
+**Let Claude Code, Codex, and Gemini collaborate in the same repository—while
+each keeps its native terminal.**
 
-CoAct is not a model provider and does not replace your agent CLIs.
+CoAct is a local coordination and safety layer for coding agents. It gives them
+shared project memory, structured planning, task ownership, direct `@agent`
+messages, write-intent locks, usage alerts, collaboration reports, and an audit
+trail. It does not replace an agent CLI or model provider.
 
-## Quickstart
+## Start in two minutes
+
+Install CoAct on your `PATH`, then initialize a repository once:
 
 ```sh
+go install github.com/tianyi-zhang-02/coact/cmd/coact@v1.0.0
+cd your-project
 coact init
 coact doctor
-coact claude      # terminal 1
-coact codex       # terminal 2
 ```
 
-Then coordinate from any terminal:
+Open one native terminal per agent:
 
 ```sh
-coact @codex "Please review Claude's proposal."
-coact @claude "Please check the UX copy."
-coact @all "Planning starts now. Read the run brief."
-coact inbox
-```
-
-Start a structured planning phase:
-
-```sh
-coact plan --with codex,claude --distributor codex "Build the auth module safely"
-```
-
-CoAct creates `.coact/runs/<run>/`, asks each agent to write a proposal, and
-asks the configured final distributor to write the final plan and create tasks.
-
-## Workflow
-
-### 1. Define team policy
-
-`coact init` creates `.coact/team.md`. Use it to define preferences such as:
-
-- who is the `final_task_distributor`
-- which agents participate in planning
-- what Claude/Codex/Gemini should usually own
-- what every agent must read before starting
-
-Local long-lived context goes in `.coact/memory/project.md`.
-
-### 2. Run native terminals
-
-Agents stay in their own CLIs:
-
-```sh
+# terminal 1
 coact claude
+
+# terminal 2
 coact codex
+
+# optional terminal 3
 coact gemini
 ```
 
-The launchers set `COACT_AGENT`, keep presence alive, and release session locks
-on exit. They also expose `COACT_BIN` and prepend the running CoAct binary's
-directory to `PATH`, so agents can run `coact inbox` even when CoAct was launched
-by absolute path. You can also run the agent CLIs manually as long as they follow
-the repo contract files.
-
-### 3. Plan together
+You do **not** need a separate management terminal. In any agent prompt, ask it
+to run a CoAct command, or run commands in any normal shell:
 
 ```sh
-coact plan --with codex,claude --distributor codex "Refactor the CLI"
+coact @codex "Review Claude's proposal before implementation."
+coact @all "Read the new brief and propose a plan."
+coact inbox
+coact status
+```
+
+The launcher sets `COACT_AGENT`, `COACT_BIN`, and `PATH`, so an agent launched
+with `/some/path/coact codex` can still run bare `coact inbox`.
+
+`v1.0.0` is the first stable terminal-native coordination release.
+
+## The normal workflow
+
+### 1. Set shared preferences
+
+`coact init` creates two human-controlled files:
+
+- `.coact/team.md` — agent roles, planning participants, and final distributor
+- `.coact/memory/project.md` — durable project facts and preferences
+
+Do not put secrets in either file.
+
+### 2. Plan together
+
+```sh
+coact plan --with codex,claude --distributor codex "Refactor authentication safely"
 coact plan status
 ```
 
-Planning files live under `.coact/runs/<run>/`:
+Each agent receives a local inbox message and writes an independent proposal
+under `.coact/runs/<run>/`. The distributor waits until proposals say
+`Status: ready` and are unlocked, then writes `final-plan.md` and creates board
+tasks. Delivery is turn-based by default: an idle agent reads the message on its
+next turn. The optional real-time bridge is experimental.
 
-- `brief.md` — human/task brief
-- `proposals/<agent>.md` — each agent's independent plan; change `Status: draft`
-  to `Status: ready` when complete
-- `notes/<agent>.md` — optional second-pass notes after reading peers
-- `final-plan.md` — distributor's execution decision
+After finishing a proposal, an agent can mark it safely without hand-editing
+metadata:
 
-### 4. Execute without collisions
+```sh
+coact plan ready <run-id>
+```
+
+### 3. Execute without stealing work
 
 ```sh
 coact board
-coact task add "Add @agent inbox syntax"
 coact claim T-001
-coact lock internal/cli
+coact lock internal/auth
+# edit and test
+coact unlock internal/auth
 coact done T-001
 ```
 
-CoAct serializes board mutations so agents cannot claim the same task at once.
-Write-intent locks prevent overlapping edits. Claude Code receives L2 hook
-enforcement; Codex and Gemini receive L1 contract enforcement.
+Board claims are serialized. Claude Code edits are hard-blocked by its hook when
+a path conflicts; Codex and Gemini follow an injected contract, so their shared-
+tree enforcement is advisory. Use `coact <agent> --worktree` when stronger
+physical isolation is important.
 
-### 5. Message and hand off
-
-```sh
-coact @claude "Please review T-001 before I mark it done."
-coact inbox
-coact handoff codex "I finished parser changes; tests still need work."
-```
-
-Messages are local filesystem inbox entries. They are not shell execution, and
-they are journaled.
-
-## Chinese expression quality layer
-
-CoAct includes a default-on, model-agnostic Chinese expression adapter foundation.
-It is designed for future response pipelines: detect Chinese or mixed Chinese/English output,
-protect fragile technical spans such as code blocks, inline code, URLs, paths,
-and tables, build a constrained polish prompt, validate the polished result, and
-fallback to the raw output if anything looks unsafe.
-
-The first release exposes diagnostics only; it does not call a polishing model by
-itself:
+### 4. Message, hand off, and audit
 
 ```sh
-echo '这是一个强大的方式来处理这个问题。' | coact zh check
-echo '这个 feature 的 goal 是让 Codex share memory，同时运行 `coact inbox`。' | coact zh check --diagnostics
-echo '这个 feature 的 goal 是让 Codex share memory，同时运行 `coact inbox`。' | coact zh check --off
+coact @claude "Please review T-001."
+coact handoff codex "Parser is complete; integration tests remain."
+coact log -n 50
 ```
 
-This layer is enabled by default when a caller wires the response adapter into a
-pipeline, and can be turned off explicitly with `DisabledConfig()` or an
-equivalent user setting. It must not change facts, commands, code, URLs, API
-names, variables, or conclusions.
+Messages only write local inbox files. They never execute shell commands.
 
-## Design
+## Usage alerts
 
-```mermaid
-flowchart TB
-    Human["Human lead"] --> CLI["CoAct CLI"]
-    CLI --> Memory[".coact/team.md<br/>.coact/memory/project.md"]
-    CLI --> Runs[".coact/runs/<run><br/>brief · proposals · final plan"]
-    CLI --> Board[".coact/board.md<br/>claim · done"]
-    CLI --> Inbox[".coact/inbox<br/>@agent messages"]
-    CLI --> Locks[".coact/locks<br/>write-intent registry"]
-    CLI --> Journal[".coact/journal<br/>audit log"]
+CoAct does not scrape private provider accounts. A human, adapter, or agent can
+record the quota data it already knows; CoAct evaluates it immediately and
+alerts at 20% steps by default:
 
-    Claude["Claude Code terminal"] --> CLI
-    Codex["Codex terminal"] --> CLI
-    Gemini["Gemini terminal"] --> CLI
-
-    Locks --> Policy["policy checks"]
-    Board --> Execution["safe parallel execution"]
+```sh
+coact usage set --agent claude --model "Opus" --percent 42 --refresh-in 7d
+coact usage set --agent codex --used 250000 --limit 1000000 --refresh "2026-07-17T00:00:00Z"
+coact usage report
+coact usage alerts
 ```
 
-The default product is terminal-native. `coact ui` remains optional and
-experimental; it is not required for the main workflow.
+`coact usage report --watch` refreshes the local view. When a window is due,
+the report asks for a new snapshot; CoAct does not poll a provider before then.
+Crossed thresholds are journaled and sent to local workmate/human inboxes.
 
-## Commands
+## Collaboration reports
 
-| Command | Purpose |
+Agents can rate each other after a run. Audit-derived facts and subjective peer
+scores remain clearly separated:
+
+```sh
+coact eval rate --peer claude --model "Opus" --score 4 \
+  --code-quality 5 --responsiveness 3 --note "Strong review; response was slow."
+coact eval report run-20260710-120000
+```
+
+The report summarizes task completion, messages, lock issues, merge conflicts,
+observed response delay, discrepancy handling, and peer-rated code quality.
+`--watch` provides a continuously refreshed terminal report. Reports are local
+decision support—not an objective model benchmark.
+
+## Chinese expression diagnostics
+
+The default-on, model-independent Chinese expression foundation detects Chinese
+and mixed Chinese/English output, protects code, URLs, paths, and tables, and
+falls back to raw text if validation fails:
+
+```sh
+echo '这个 feature 的 goal 是共享 memory，同时运行 `coact inbox`。' | coact zh check --diagnostics
+echo '这是一个测试。' | coact zh check --off
+```
+
+The current release exposes detection/protection diagnostics and a Go adapter;
+it does not automatically call a polishing model inside Claude/Codex/Gemini.
+
+## What is ready?
+
+See [Feature status](docs/FEATURES.md) for the reviewed matrix. In short:
+
+- **Ready:** initialization, native launchers, shared memory, planning files,
+  board ownership, inbox, locks/policy, audit log, worktrees, local usage alerts,
+  collaboration reports, and Chinese diagnostics.
+- **Experimental:** real-time Claude↔Codex bridge, local UI, and managed updates.
+- **Not included:** autonomous agent wake-up, provider-account scraping, embedded
+  terminals, automatic model switching, or a full autopilot.
+
+## Safety model
+
+- Coordination data stays under `.coact/`; sensitive runtime data is gitignored.
+- Agent/run identifiers are path-safe; state writes are atomic and serialized
+  where concurrent mutation matters.
+- `.coact/config.json`, board internals, locks, inboxes, journals, terminal logs,
+  usage snapshots, and evaluations are protected from direct agent rewrites.
+- `coact doctor` checks wiring and runs an enforcement self-test.
+- Hooks fail open for availability: CoAct is a guardrail, not a process sandbox.
+- `coact update` is opt-in, HTTPS-only, and SHA-256 verified, but releases are
+  not cryptographically signed yet.
+
+Read [SECURITY.md](SECURITY.md) before relying on CoAct for high-assurance work.
+
+## Command map
+
+| Need | Command |
 |---|---|
-| `coact` | Show terminal workspace summary |
-| `coact init` / `doctor` / `deinit` | Set up, verify, or remove CoAct wiring |
-| `coact claude` / `codex` / `gemini` | Launch managed native agent sessions |
-| `coact @agent "..."` / `@all "..."` | Send local inbox messages |
-| `coact plan "..."` / `plan status` | Create or inspect a planning run |
-| `coact board` / `task add` / `claim` / `done` | Manage shared tasks |
-| `coact status` / `log` | Inspect participants, locks, and audit trail |
-| `coact inbox` / `handoff` | Read messages or transfer context/tasks |
-| `coact lock` / `unlock` / `policy` | Manage write intent and policy checks |
-| `coact worktree` / `merge` | Isolate agents on branches and integrate work |
-| `coact versions` / `update` / `switch` | Manage binaries under `~/.coact` |
-| `coact zh check` | Diagnose Chinese expression adapter trigger/protection |
-| `coact ui` | Optional experimental local UI |
+| Set up or verify | `coact init`, `coact doctor`, `coact deinit` |
+| Launch agents | `coact claude`, `coact codex`, `coact gemini` |
+| Plan | `coact plan`, `coact plan ready`, `coact plan status` |
+| Own work | `coact board`, `task add`, `claim`, `done` |
+| Coordinate | `coact @agent`, `@all`, `inbox`, `handoff` |
+| Prevent overlap | `coact lock`, `unlock`, `policy`, `worktree`, `merge` |
+| Observe | `coact`, `status`, `log` |
+| Track quota | `coact usage set`, `report`, `alerts` |
+| Review teamwork | `coact eval rate`, `report` |
+| Diagnose Chinese output | `coact zh check` |
+| Manage versions | `coact versions`, `update`, `switch` |
 
-Run `coact help` for the full command list.
+Run `coact help` for all flags. `coact ui`, `channel`, and `bridge` remain
+optional experimental commands.
 
-## Safety
-
-- `@agent` and inbox messages only write local files; they do not execute shell.
-- Board mutations are serialized, so two agents cannot claim the same task at once.
-- Write-intent locks prevent accidental overlapping edits.
-- Runtime/sensitive coordination state is gitignored: inbox, journal, locks,
-  sessions, terminal logs, planning runs, and local memory.
-- Hooks fail open: if CoAct errors, it does not brick your editor.
-- `coact update` is opt-in, uses HTTPS, and verifies SHA-256 checksums.
-- The Chinese expression adapter protects technical spans and falls back to raw output on validation failure.
-
-See [SECURITY.md](SECURITY.md) for the full model.
-
-## Install
-
-```sh
-go install github.com/tianyi-zhang-02/coact/cmd/coact@latest
-```
-
-Or build locally:
+## Install from source
 
 ```sh
 git clone https://github.com/tianyi-zhang-02/coact
 cd coact
 go build -o coact ./cmd/coact
 ```
-
-## License
 
 MIT — see [LICENSE](LICENSE).

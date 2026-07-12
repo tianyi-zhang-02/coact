@@ -27,10 +27,32 @@ func TestEnsureGitignoreIncludesRuntimeState(t *testing.T) {
 		".coact/terminal/",
 		".coact/runs/",
 		".coact/memory/",
+		".coact/usage/",
+		".coact/evaluations/",
 	} {
 		if !strings.Contains(content, want) {
 			t.Fatalf(".gitignore missing %q in:\n%s", want, content)
 		}
+	}
+}
+
+func TestEnsureMarkedBlockUpdatesExistingContract(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "AGENTS.md")
+	initial := "user text\n\n<!-- coact:begin -->\nold contract\n<!-- coact:end -->\n"
+	if err := os.WriteFile(path, []byte(initial), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := ensureMarkedBlock(path, "new contract")
+	if err != nil || !changed {
+		t.Fatalf("changed=%v err=%v", changed, err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "user text") || !strings.Contains(content, "new contract") || strings.Contains(content, "old contract") {
+		t.Fatalf("unexpected updated contract:\n%s", content)
 	}
 }
 
@@ -67,6 +89,35 @@ func TestMigrateLegacyProtectedCoactGlob(t *testing.T) {
 	}
 	if !containsString(cfg.Policy.ProtectedPaths, ".coact/config.json") {
 		t.Fatalf("config should remain protected: %#v", cfg.Policy.ProtectedPaths)
+	}
+}
+
+func TestMigrateVersionAddsNewProtectedStateWithoutDroppingCustomPaths(t *testing.T) {
+	cfg := config.Default()
+	cfg.Version = "0.1"
+	cfg.Policy.ProtectedPaths = []string{"secrets/**"}
+
+	if !migrateProtectedPaths(cfg) {
+		t.Fatal("expected old config version to migrate")
+	}
+	for _, want := range []string{"secrets/**", ".coact/usage/**", ".coact/evaluations/**"} {
+		if !containsString(cfg.Policy.ProtectedPaths, want) {
+			t.Fatalf("migration missing %q: %#v", want, cfg.Policy.ProtectedPaths)
+		}
+	}
+	if cfg.Version != config.Default().Version {
+		t.Fatalf("version = %q", cfg.Version)
+	}
+}
+
+func TestMigrateRepairsMissingRequiredPathAtCurrentVersion(t *testing.T) {
+	cfg := config.Default()
+	cfg.Policy.ProtectedPaths = []string{".coact/config.json"}
+	if !migrateProtectedPaths(cfg) {
+		t.Fatal("expected missing mandatory protection to be repaired")
+	}
+	if !containsString(cfg.Policy.ProtectedPaths, ".coact/evaluations/**") {
+		t.Fatalf("evaluation protection was not restored: %#v", cfg.Policy.ProtectedPaths)
 	}
 }
 

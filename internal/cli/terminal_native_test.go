@@ -150,3 +150,27 @@ func TestProposalStatusParsesCaseInsensitively(t *testing.T) {
 		t.Fatalf("proposalStatus = %q, want ready", got)
 	}
 }
+
+func TestPlanReadyMarksOwnProposalAndNotifiesDistributor(t *testing.T) {
+	dir := chdirInitializedProject(t)
+	if code := Run([]string{"plan", "--id", "r-002", "--with", "codex,claude", "--distributor", "claude", "Plan safely"}); code != 0 {
+		t.Fatalf("Run(plan) = %d", code)
+	}
+	if code := Run([]string{"plan", "ready", "--agent", "codex", "r-002"}); code != 0 {
+		t.Fatalf("Run(plan ready) = %d", code)
+	}
+	proposal, err := os.ReadFile(filepath.Join(dir, ".coact", "runs", "r-002", "proposals", "codex.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(proposal), "Status: ready") {
+		t.Fatalf("proposal not ready:\n%s", proposal)
+	}
+	inbox, err := os.ReadFile(filepath.Join(dir, ".coact", "inbox", "claude.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(inbox), "Proposal ready") {
+		t.Fatalf("distributor was not notified:\n%s", inbox)
+	}
+}

@@ -39,8 +39,14 @@ func cmdDoctor(args []string) int {
 	cfg, err := config.Load(p.ConfigPath())
 	if err != nil {
 		bad("config invalid: " + err.Error())
+		cfg = config.Default()
 	} else {
 		ok(fmt.Sprintf("config ok (mode %s)", cfg.Mode))
+		if missing := missingProtectedPaths(cfg); len(missing) > 0 {
+			bad("config is missing required protected paths: " + strings.Join(missing, ", ") + " — run `coact init`")
+		} else {
+			ok("machine-managed coordination state is policy-protected")
+		}
 	}
 
 	if cmd, cargs, found := wiredHookCommand(p.Root); found {
@@ -62,8 +68,10 @@ func cmdDoctor(args []string) int {
 			continue
 		}
 		path := filepath.Join(p.Root, ad.ContractFile)
-		if hasCoactBlock(path) {
+		if contractCurrent(path, ad.Contract()) {
 			ok(ad.ContractFile + " has the " + ad.ID + " contract")
+		} else if hasCoactBlock(path) {
+			warn(ad.ContractFile + " has a stale " + ad.ID + " contract — run `coact init` to refresh it")
 		} else {
 			warn(ad.ContractFile + " is missing the " + ad.ID + " contract — run `coact init`")
 		}
@@ -103,6 +111,32 @@ func cmdDoctor(args []string) int {
 	}
 	fmt.Println("coact found problems above; fix the FAIL lines (usually: re-run `coact init`).")
 	return 1
+}
+
+func missingProtectedPaths(cfg *config.Config) []string {
+	if cfg == nil {
+		return append([]string(nil), config.Default().Policy.ProtectedPaths...)
+	}
+	present := map[string]bool{}
+	for _, path := range cfg.Policy.ProtectedPaths {
+		present[path] = true
+	}
+	var missing []string
+	for _, path := range config.Default().Policy.ProtectedPaths {
+		if !present[path] {
+			missing = append(missing, path)
+		}
+	}
+	return missing
+}
+
+func contractCurrent(path, body string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	want := coactBegin + "\n" + strings.TrimRight(body, "\n") + "\n" + coactEnd
+	return strings.Contains(string(data), want)
 }
 
 func hasCoactBlock(path string) bool {

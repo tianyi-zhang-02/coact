@@ -18,6 +18,8 @@ flowchart TB
         BOARD["board.md"]
         SESS["session/"]
         JOUR["journal/"]
+        USAGE["usage/"]
+        EVAL["evaluations/"]
     end
     POL --> LOCKS
     CLI --> BOARD
@@ -111,6 +113,8 @@ mid-turn push and automatic quota-triggered hand-off remain on the roadmap.
 | `internal/presence` | per-session heartbeat; the liveness authority for lock stealing |
 | `internal/journal` | append-only JSONL audit log |
 | `internal/inbox` | turn-based agent-to-agent messages (`msg`/`inbox`/`handoff`) |
+| `internal/usage` | provider-independent quota windows and threshold history |
+| `internal/evaluation` | peer ratings plus evidence-labeled collaboration reports |
 | `internal/config` | `.coact/config.json` |
 | `internal/project` | locating `.coact/` and resolving its paths |
 | `internal/platform` | atomic writes + build-tagged process-liveness (macOS/Linux/Windows) |
@@ -122,8 +126,9 @@ mid-turn push and automatic quota-triggered hand-off remain on the roadmap.
   every action attributable. The hook is the hard enforcement point for Claude.
 - **Controllability** — the plan is the `board.md` you own and edit; all state is
   plain inspectable files; `coact deinit` cleanly backs everything out.
-- **Cost** — coordination is filesystem I/O, not tokens; concurrency and the
-  (future) messaging plane are opt-in, not the always-on baseline.
+- **Cost** — coordination is filesystem I/O, not tokens; provider usage is
+  recorded only when a human or adapter supplies a snapshot. The stable inbox
+  is turn-based; the real-time bridge is optional and experimental.
 
 See [SPEC.md](SPEC.md) for file formats and state machines, and
 [ROADMAP.md](ROADMAP.md) for what is built versus planned.

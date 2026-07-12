@@ -2,193 +2,196 @@
 
 [English](README.md) · **中文**
 
-**给多个编码 agent 共用同一个仓库的终端原生协作层。**
+<img src="assets/mascot/icon.png" alt="CoAct 机器人宇航员 CoBot" width="140">
 
-CoAct 让 Claude Code、Codex、Gemini 和其他编码 agent 可以在同一个项目里协作，
-不用来回复制上下文，也尽量避免互相覆盖文件。agent 继续使用它们自己的原生
-terminal；CoAct 负责共享协调层：团队规则、项目记忆、planning run、任务归属、
-inbox 消息、写入意图锁、策略检查和审计日志。
+**让 Claude Code、Codex 和 Gemini 在同一个仓库协作，同时保留各自原生 terminal。**
 
-CoAct 不是模型提供方，也不替代 Claude/Codex/Gemini 的 CLI。
+CoAct 是本地的多 agent 协作与安全层：共享项目记忆、共同规划、任务归属、`@agent`
+消息、写入意图锁、用量提醒、合作报告和审计记录。它不会替代 agent CLI，也不是模型
+提供方。
 
-## 快速开始
+## 两分钟开始
+
+先把 CoAct 安装到 `PATH`，然后在每个项目初始化一次：
 
 ```sh
+go install github.com/tianyi-zhang-02/coact/cmd/coact@v1.0.0
+cd your-project
 coact init
 coact doctor
-coact claude      # terminal 1
-coact codex       # terminal 2
 ```
 
-之后可以从任意 terminal 协调：
+每个 agent 使用一个原生 terminal：
 
 ```sh
-coact @codex "请 review Claude 的 proposal。"
-coact @claude "请检查 UX copy。"
-coact @all "planning 开始，请读取 run brief。"
-coact inbox
-```
-
-启动结构化 planning phase：
-
-```sh
-coact plan --with codex,claude --distributor codex "安全地实现 auth module"
-```
-
-CoAct 会创建 `.coact/runs/<run>/`，要求每个 agent 写 proposal，并让配置好的 final
-distributor 写最终方案和创建任务。
-
-## 工作流
-
-### 1. 定义团队规则
-
-`coact init` 会创建 `.coact/team.md`。可以在里面定义：
-
-- 谁是 `final_task_distributor`
-- 哪些 agent 参与 planning
-- Claude/Codex/Gemini 通常负责什么
-- 每个 agent 开始前必须读取什么
-
-本地长期上下文放在 `.coact/memory/project.md`。
-
-### 2. 保留原生 terminal
-
-agent 继续跑在自己的 CLI 里：
-
-```sh
+# terminal 1
 coact claude
+
+# terminal 2
 coact codex
+
+# 可选 terminal 3
 coact gemini
 ```
 
-launcher 会设置 `COACT_AGENT`、保持 presence，并在退出时释放本 session 的锁。
-它也会设置 `COACT_BIN`，并把当前 CoAct binary 所在目录放到 `PATH` 前面，所以即使用
-绝对路径启动，agent 也能运行 `coact inbox`。你也可以手动运行 agent CLI，只要它遵守
-仓库里的 contract 文件。
-
-### 3. 一起规划
+不需要额外开启第三个“管理 terminal”。你可以在任意 agent 对话里让它执行 CoAct
+命令，也可以在普通 shell 里执行：
 
 ```sh
-coact plan --with codex,claude --distributor codex "重构 CLI"
+coact @codex "实现前先 review Claude 的 proposal。"
+coact @all "读取新 brief，并分别提出方案。"
+coact inbox
+coact status
+```
+
+launcher 会设置 `COACT_AGENT`、`COACT_BIN` 和 `PATH`。即使你用
+`/some/path/coact codex` 启动，agent 仍然可以直接运行 `coact inbox`。
+
+`v1.0.0` 是第一个稳定的 terminal-native coordination release。
+
+## 日常工作流
+
+### 1. 设置共享偏好
+
+`coact init` 会创建两个由 human 控制的文件：
+
+- `.coact/team.md`：agent 分工、planning 参与者和最终任务分配者
+- `.coact/memory/project.md`：长期项目事实和偏好
+
+不要在这些文件里放密钥或私人数据。
+
+### 2. 一起规划
+
+```sh
+coact plan --with codex,claude --distributor codex "安全地重构 authentication"
 coact plan status
 ```
 
-planning 文件位于 `.coact/runs/<run>/`：
+每个 agent 会收到本地 inbox 消息，并在 `.coact/runs/<run>/` 下独立写 proposal。
+distributor 等所有 proposal 都变成 `Status: ready` 且已解锁，再写 `final-plan.md`
+并创建 board tasks。默认消息是 turn-based：空闲 agent 会在下一次 turn 读取；实验性的
+real-time bridge 可以提供 mid-turn push。
 
-- `brief.md`：人类/任务 brief
-- `proposals/<agent>.md`：每个 agent 的独立方案；完成后把 `Status: draft`
-  改成 `Status: ready`
-- `notes/<agent>.md`：读取彼此方案后的 second-pass notes
-- `final-plan.md`：distributor 的最终执行决策
+proposal 写完后，agent 不需要手动改 metadata：
 
-### 4. 安全并行执行
+```sh
+coact plan ready <run-id>
+```
+
+### 3. 不抢任务、不互相覆盖
 
 ```sh
 coact board
-coact task add "Add @agent inbox syntax"
 coact claim T-001
-coact lock internal/cli
+coact lock internal/auth
+# 修改和测试
+coact unlock internal/auth
 coact done T-001
 ```
 
-CoAct 会串行化 board 修改，所以两个 agent 不能同时 claim 同一个任务。写入意图锁会减少
-重叠编辑。Claude Code 有 L2 hook 硬拦截；Codex 和 Gemini 通过 L1 contract 自律执行。
+board claim 会串行化。Claude Code 遇到冲突路径时会被 hook 硬拦截；Codex 和 Gemini
+通过注入的 contract 自律，因此共享目录里的保护属于 advisory。需要更强物理隔离时，
+使用 `coact <agent> --worktree`。
 
-### 5. 消息和交接
-
-```sh
-coact @claude "T-001 完成前请 review 一下。"
-coact inbox
-coact handoff codex "parser 改完了；测试还需要补。"
-```
-
-消息只是本地 filesystem inbox，不是 shell 执行，并且会写入 journal。
-
-## 中文表达质量层
-
-CoAct 现在包含一个默认开启、模型无关的中文表达 adapter 基础层。它面向后续 response
-pipeline：检测中文或中英混杂输出，保护代码块、inline code、URL、路径和表格等技术
-span，构造受约束的润色 prompt，校验润色结果；一旦不安全就回退到原始输出。
-
-第一版只暴露诊断能力，不会自己调用润色模型：
+### 4. 消息、交接与审计
 
 ```sh
-echo '这是一个强大的方式来处理这个问题。' | coact zh check
-echo '这个 feature 的 goal 是让 Codex share memory，同时运行 `coact inbox`。' | coact zh check --diagnostics
-echo '这个 feature 的 goal 是让 Codex share memory，同时运行 `coact inbox`。' | coact zh check --off
+coact @claude "请 review T-001。"
+coact handoff codex "parser 已完成；integration tests 还没做。"
+coact log -n 50
 ```
 
-调用方把 response adapter 接入 pipeline 后，这个层默认开启；用户或集成方可以通过
-`DisabledConfig()` 或等价设置关闭。它不能改变事实、命令、代码、URL、API 名、变量名或结论。
+消息只会写本地 inbox 文件，不会执行 shell 命令。
 
-## 设计
+## 用量与配额提醒
 
-```mermaid
-flowchart TB
-    Human["Human lead"] --> CLI["CoAct CLI"]
-    CLI --> Memory[".coact/team.md<br/>.coact/memory/project.md"]
-    CLI --> Runs[".coact/runs/<run><br/>brief · proposals · final plan"]
-    CLI --> Board[".coact/board.md<br/>claim · done"]
-    CLI --> Inbox[".coact/inbox<br/>@agent messages"]
-    CLI --> Locks[".coact/locks<br/>write-intent registry"]
-    CLI --> Journal[".coact/journal<br/>audit log"]
+CoAct 不抓取你的 provider 私有账户。human、adapter 或 agent 可以把已经知道的配额
+数据写入 CoAct；系统会立即计算，并默认每 20% 提醒一次：
 
-    Claude["Claude Code terminal"] --> CLI
-    Codex["Codex terminal"] --> CLI
-    Gemini["Gemini terminal"] --> CLI
-
-    Locks --> Policy["policy checks"]
-    Board --> Execution["safe parallel execution"]
+```sh
+coact usage set --agent claude --model "Opus" --percent 42 --refresh-in 7d
+coact usage set --agent codex --used 250000 --limit 1000000 --refresh "2026-07-17T00:00:00Z"
+coact usage report
+coact usage alerts
 ```
 
-默认产品形态是 terminal-native。`coact ui` 仍然保留为可选实验功能，但不是主流程必需。
+`coact usage report --watch` 会持续刷新本地状态。刷新时间到达前 CoAct 不轮询；到期后
+report 会提示录入新 snapshot。跨过阈值时，会写 journal，并通知本地 human/workmate
+inbox。
 
-## 命令
+## 合作质量报告
 
-| 命令 | 作用 |
+一个 run 结束后，agent 可以互相评分。审计事实和主观评分会明确分开：
+
+```sh
+coact eval rate --peer claude --model "Opus" --score 4 \
+  --code-quality 5 --responsiveness 3 --note "review 很扎实，但响应偏慢。"
+coact eval report run-20260710-120000
+```
+
+报告汇总任务完成、消息、锁冲突、merge conflict、观测响应时间、discrepancy 处理和
+互评 code quality。`--watch` 可持续刷新。这个报告用于 human 动态调整分工和模型，不是
+客观 benchmark。
+
+## 中文表达诊断
+
+默认开启、模型无关的中文表达基础层可检测中文和中英混合文本，保护 code、URL、路径
+和表格；校验不通过就回退原文：
+
+```sh
+echo '这个 feature 的 goal 是共享 memory，同时运行 `coact inbox`。' | coact zh check --diagnostics
+echo '这是一个测试。' | coact zh check --off
+```
+
+当前版本提供 detection/protection 诊断和 Go adapter，但不会自动接管 Claude、Codex
+或 Gemini 的输出，也不会自行调用润色模型。
+
+## 哪些功能可以直接用？
+
+完整审查结果见 [功能状态](docs/FEATURES.md)。简要结论：
+
+- **Ready：**初始化、原生 launcher、共享记忆、planning files、board ownership、
+  inbox、locks/policy、audit log、worktrees、本地用量提醒、合作报告和中文诊断。
+- **Experimental：**Claude↔Codex real-time bridge、本地 UI、managed updates。
+- **尚未包含：**自动唤醒空闲 agent、抓取 provider 私有账户、嵌入式 terminal、自动
+  模型切换或 full autopilot。
+
+## 安全模型
+
+- 协作数据位于 `.coact/`；敏感 runtime 数据默认 gitignore。
+- agent/run ID 有严格路径校验；状态使用 atomic write，并在并发 mutation 处加锁。
+- config、board 内部状态、locks、inbox、journal、terminal logs、usage 和 evaluations
+  都禁止 agent 直接改写。
+- `coact doctor` 会检查接线，并运行 enforcement self-test。
+- hook 失败开放以保证可用性；CoAct 是 guardrail，不是 process sandbox。
+- `coact update` 只在用户主动调用时联网，使用 HTTPS + SHA-256；release 尚未签名。
+
+高安全需求请先阅读 [SECURITY.md](SECURITY.md)。
+
+## 命令地图
+
+| 需求 | 命令 |
 |---|---|
-| `coact` | 显示 terminal 工作区摘要 |
-| `coact init` / `doctor` / `deinit` | 设置、验证或移除 CoAct 接线 |
-| `coact claude` / `codex` / `gemini` | 启动受管理的原生 agent session |
-| `coact @agent "..."` / `@all "..."` | 发送本地 inbox 消息 |
-| `coact plan "..."` / `plan status` | 创建或查看 planning run |
-| `coact board` / `task add` / `claim` / `done` | 管理共享任务 |
-| `coact status` / `log` | 查看参与者、锁和审计记录 |
-| `coact inbox` / `handoff` | 读取消息或转交上下文/任务 |
-| `coact lock` / `unlock` / `policy` | 管理写入意图和策略检查 |
-| `coact worktree` / `merge` | 用分支隔离 agent，并集成工作 |
-| `coact versions` / `update` / `switch` | 管理 `~/.coact` 下的二进制版本 |
-| `coact zh check` | 诊断中文表达 adapter 是否触发、保护哪些 span |
-| `coact ui` | 可选实验性本地 UI |
+| 初始化/检查 | `coact init`, `coact doctor`, `coact deinit` |
+| 启动 agent | `coact claude`, `coact codex`, `coact gemini` |
+| 一起规划 | `coact plan`, `coact plan ready`, `coact plan status` |
+| 管理任务 | `coact board`, `task add`, `claim`, `done` |
+| 协作沟通 | `coact @agent`, `@all`, `inbox`, `handoff` |
+| 防止覆盖 | `coact lock`, `unlock`, `policy`, `worktree`, `merge` |
+| 查看状态 | `coact`, `status`, `log` |
+| 配额提醒 | `coact usage set`, `report`, `alerts` |
+| 合作复盘 | `coact eval rate`, `report` |
+| 中文诊断 | `coact zh check` |
+| 版本管理 | `coact versions`, `update`, `switch` |
 
-完整命令见 `coact help`。
+完整参数见 `coact help`。`coact ui`、`channel` 和 `bridge` 保留为可选实验功能。
 
-## 安全
-
-- `@agent` 和 inbox 消息只写本地文件，不执行 shell。
-- board 修改会被串行化，两个 agent 不能同时 claim 同一个任务。
-- 写入意图锁用于避免互相覆盖。
-- 运行时/敏感协作状态默认 gitignore：inbox、journal、locks、session、terminal logs、planning runs、本地 memory。
-- hook 失败开放：如果 CoAct 出错，不会锁死编辑器。
-- `coact update` 是可选功能，使用 HTTPS，并校验 SHA-256。
-- 中文表达 adapter 会保护技术 span；校验失败时直接回退原文。
-
-完整模型见 [SECURITY.md](SECURITY.md)。
-
-## 安装
-
-```sh
-go install github.com/tianyi-zhang-02/coact/cmd/coact@latest
-```
-
-或本地构建：
+## 从源码安装
 
 ```sh
 git clone https://github.com/tianyi-zhang-02/coact
 cd coact
 go build -o coact ./cmd/coact
 ```
-
-## 许可
 
 MIT —— 见 [LICENSE](LICENSE)。

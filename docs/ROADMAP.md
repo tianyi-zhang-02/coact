@@ -20,6 +20,12 @@ Target ship: **2026-07-09** (3 days from 2026-07-06).
 > local UI remains experimental; the release is centered on native terminals,
 > shared memory, task ownership, locks, policy, and journaled coordination.
 
+> **Progress (2026-07-10):** completed a release-readiness review. Added
+> provider-independent quota windows with default 20% alerts, evidence-labeled
+> peer collaboration reports, contract/config migrations, protected local
+> usage/evaluation state, and a feature-status matrix. The UI, managed updater,
+> and real-time bridge remain experimental.
+
 ## What "usable MVP" means
 
 The demo that must work end to end: **one agent is editing a path; another
@@ -50,11 +56,11 @@ installs in one line, it's an MVP.
 advisory locks with Claude L2 hook enforcement, capability policy, board,
 journal, status, worktree mode + merge gates, and real release.
 
-**Out (v0.2+):** embedded live terminals, UI model switching, deeper real-time
-mid-turn control, autopilot, release signing, visual/binary diffs, and automatic
-Chinese polishing inside provider pipelines. The v0.1 line includes the
-default-on model-agnostic Chinese expression adapter foundation and CLI diagnostics only; callers can still disable it explicitly.
-Listed in the README as "coming" so the first release reads as scoped, not thin.
+**Out (later):** embedded live terminals, UI model switching, automatic provider
+quota scraping, autopilot, release signing, visual/binary diffs, and automatic
+Chinese polishing inside provider pipelines. The current line includes the
+default-on model-agnostic Chinese expression adapter foundation and CLI
+diagnostics only; callers can disable it explicitly.
 
 ## v0.1.0 — Initial terminal-native coordination
 

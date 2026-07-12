@@ -1,12 +1,32 @@
 package versionmgr
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestReleaseManifestCopyMatchesBundledProductDescription(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "release", "coact_manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var release Manifest
+	if err := json.Unmarshal(data, &release); err != nil {
+		t.Fatal(err)
+	}
+	bundled := BundledManifest()
+	if bundled == nil {
+		t.Fatal("bundled manifest did not parse")
+	}
+	if release.Summary != bundled.Summary || strings.Join(release.Notes, "\n") != strings.Join(bundled.Notes, "\n") {
+		t.Fatalf("release and bundled product descriptions drifted")
+	}
+}
 
 func TestParseManifestAndSelectAsset(t *testing.T) {
 	data := []byte(`{
@@ -126,6 +146,39 @@ func TestSwitchOnlyChangesManagedShim(t *testing.T) {
 	}
 }
 
+func TestCopiedActiveVersionUsesValidatedMarkerAndLegacyFallback(t *testing.T) {
+	home := t.TempDir()
+	first := filepath.Join(BinDir(home), BinaryName("v0.1.0"))
+	second := filepath.Join(BinDir(home), BinaryName("v0.2.0"))
+	if err := os.MkdirAll(BinDir(home), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(first, []byte("first"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(second, []byte("second"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyFile(second, LinkPath(home), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := copiedActiveVersion(home); got != "v0.2.0" {
+		t.Fatalf("legacy fallback = %q", got)
+	}
+	if err := writeActiveVersion(home, "v0.1.0"); err != nil {
+		t.Fatal(err)
+	}
+	if got := copiedActiveVersion(home); got != "v0.2.0" {
+		t.Fatalf("stale marker should fall back to matching content, got %q", got)
+	}
+	if err := writeActiveVersion(home, "v0.2.0"); err != nil {
+		t.Fatal(err)
+	}
+	if got := copiedActiveVersion(home); got != "v0.2.0" {
+		t.Fatalf("validated marker = %q", got)
+	}
+}
+
 func TestValidateVersionRejectsUnsafeNames(t *testing.T) {
 	for _, version := range []string{"", " v1.0.0", "v1.0.0 ", "../v1", `v1\bad`, "v1..2", "v1;touch-x"} {
 		if err := validateVersion(version); err == nil {
@@ -145,5 +198,15 @@ func TestDownloadToTempRejectsNonHTTPS(t *testing.T) {
 	}
 	if _, err := getBytes(nil, "file:///tmp/coact_manifest.json"); err == nil {
 		t.Fatal("getBytes should reject non-HTTPS release URLs")
+	}
+}
+
+func TestLimitedReadersRejectOversizedInput(t *testing.T) {
+	if _, err := readLimited(strings.NewReader("12345"), 4); err == nil {
+		t.Fatal("readLimited should reject oversized metadata")
+	}
+	var out bytes.Buffer
+	if _, err := copyLimited(&out, strings.NewReader("12345"), 4); err == nil {
+		t.Fatal("copyLimited should reject oversized payload")
 	}
 }

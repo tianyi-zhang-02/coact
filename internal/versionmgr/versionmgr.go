@@ -19,6 +19,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/tianyi-zhang-02/coact/internal/platform"
 )
 
 // Manifest describes one published coact release.
@@ -75,7 +77,7 @@ const bundledManifestJSON = `{
   "channel": "beta",
   "stability": "experimental",
   "recommended": false,
-  "summary": "Initial terminal-native coordination release with @agent inbox messages, planning runs, shared memory, tasks, locks, and managed versions.",
+  "summary": "Terminal-native multi-agent coordination with shared planning, safe task ownership, usage alerts, collaboration reports, and auditability.",
   "supports": {
     "cli": true,
     "ui": true,
@@ -87,6 +89,8 @@ const bundledManifestJSON = `{
   "notes": [
     "coact with no arguments shows the terminal-native workspace summary.",
     "Use coact @agent, coact @all, and coact plan for native-terminal coordination.",
+    "Provider-independent usage snapshots trigger local alerts at 20% steps by default.",
+    "Collaboration reports separate audit-derived facts from subjective peer ratings.",
     "coact ui remains available as an optional experimental local control center.",
     "coact update installs into ~/.coact and never overwrites system binaries.",
     "Real-time push remains experimental; the default workflow is turn-based inbox coordination.",
@@ -96,6 +100,12 @@ const bundledManifestJSON = `{
   "assets": [],
   "checksums": {}
 }`
+
+const (
+	maxMetadataBytes = 4 << 20
+	maxArchiveBytes  = 256 << 20
+	maxBinaryBytes   = 128 << 20
+)
 
 // BundledManifest returns the version metadata embedded into this binary for
 // display in the local UI.
@@ -214,6 +224,10 @@ func LocalVersions(home string) []LocalInfo {
 		return nil
 	}
 	active := activeTarget(home)
+	activeVersion := ""
+	if runtime.GOOS == "windows" {
+		activeVersion = copiedActiveVersion(home)
+	}
 	var out []LocalInfo
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -228,10 +242,14 @@ func LocalVersions(home string) []LocalInfo {
 		}
 		path := filepath.Join(BinDir(home), entry.Name())
 		abs, _ := filepath.Abs(path)
+		isActive := active != "" && abs == active
+		if runtime.GOOS == "windows" {
+			isActive = activeVersion != "" && strings.TrimPrefix(name, "coact-") == activeVersion
+		}
 		out = append(out, LocalInfo{
 			Version: strings.TrimPrefix(name, "coact-"),
 			Path:    path,
-			Active:  active != "" && abs == active,
+			Active:  isActive,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -258,7 +276,10 @@ func Switch(home, version string) error {
 
 	link := LinkPath(home)
 	if runtime.GOOS == "windows" {
-		return copyFile(target, link, 0o755)
+		if err := copyFile(target, link, 0o755); err != nil {
+			return err
+		}
+		return writeActiveVersion(home, version)
 	}
 	absTarget, err := filepath.Abs(target)
 	if err != nil {
@@ -493,10 +514,13 @@ func getBytes(client *http.Client, url string) ([]byte, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if err := requireHTTPS(resp.Request.URL.String()); err != nil {
+		return nil, err
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
 	}
-	return io.ReadAll(resp.Body)
+	return readLimited(resp.Body, maxMetadataBytes)
 }
 
 func downloadToTemp(client *http.Client, url, name string) (string, error) {
@@ -508,15 +532,21 @@ func downloadToTemp(client *http.Client, url, name string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
+	if err := requireHTTPS(resp.Request.URL.String()); err != nil {
+		return "", err
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("GET %s: %s", url, resp.Status)
+	}
+	if resp.ContentLength > maxArchiveBytes {
+		return "", fmt.Errorf("release asset is too large: %d bytes", resp.ContentLength)
 	}
 	tmp, err := os.CreateTemp("", "coact-"+filepath.Base(name)+"-*")
 	if err != nil {
 		return "", err
 	}
 	defer tmp.Close()
-	if _, err := io.Copy(tmp, resp.Body); err != nil {
+	if _, err := copyLimited(tmp, resp.Body, maxArchiveBytes); err != nil {
 		_ = os.Remove(tmp.Name())
 		return "", err
 	}
@@ -539,7 +569,13 @@ func installDownloadedAsset(home, version, path, name string) (string, error) {
 			return "", err
 		}
 	default:
-		if err := copyFile(path, dest, 0o755); err != nil {
+		file, err := os.Open(path)
+		if err != nil {
+			return "", err
+		}
+		err = writeBinary(dest, file)
+		file.Close()
+		if err != nil {
 			return "", err
 		}
 	}
@@ -569,6 +605,9 @@ func installFromTarGz(path, dest string) error {
 		if h.FileInfo().IsDir() || !isCoactBinaryName(filepath.Base(h.Name)) {
 			continue
 		}
+		if h.Size > maxBinaryBytes {
+			return fmt.Errorf("archive binary is too large: %d bytes", h.Size)
+		}
 		return writeBinary(dest, tr)
 	}
 	return errors.New("archive did not contain coact binary")
@@ -583,6 +622,9 @@ func installFromZip(path, dest string) error {
 	for _, f := range zr.File {
 		if f.FileInfo().IsDir() || !isCoactBinaryName(filepath.Base(f.Name)) {
 			continue
+		}
+		if f.UncompressedSize64 > maxBinaryBytes {
+			return fmt.Errorf("archive binary is too large: %d bytes", f.UncompressedSize64)
 		}
 		rc, err := f.Open()
 		if err != nil {
@@ -609,7 +651,7 @@ func writeBinary(dest string, src io.Reader) error {
 	if err != nil {
 		return err
 	}
-	if _, err := io.Copy(f, src); err != nil {
+	if _, err := copyLimited(f, src, maxBinaryBytes); err != nil {
 		f.Close()
 		_ = os.Remove(tmp)
 		return err
@@ -621,6 +663,25 @@ func writeBinary(dest string, src io.Reader) error {
 	_ = os.Chmod(tmp, 0o755)
 	_ = os.Remove(dest)
 	return os.Rename(tmp, dest)
+}
+
+func readLimited(src io.Reader, limit int64) ([]byte, error) {
+	var out strings.Builder
+	if _, err := copyLimited(&out, src, limit); err != nil {
+		return nil, err
+	}
+	return []byte(out.String()), nil
+}
+
+func copyLimited(dst io.Writer, src io.Reader, limit int64) (int64, error) {
+	written, err := io.Copy(dst, io.LimitReader(src, limit+1))
+	if err != nil {
+		return written, err
+	}
+	if written > limit {
+		return written, fmt.Errorf("input exceeds %d-byte safety limit", limit)
+	}
+	return written, nil
 }
 
 func copyFile(src, dest string, mode os.FileMode) error {
@@ -690,4 +751,82 @@ func activeTarget(home string) string {
 	}
 	abs, _ := filepath.Abs(target)
 	return abs
+}
+
+func activeVersionPath(home string) string {
+	return filepath.Join(home, "active-version")
+}
+
+func writeActiveVersion(home, version string) error {
+	if err := validateVersion(version); err != nil {
+		return err
+	}
+	return platform.AtomicWrite(activeVersionPath(home), []byte(version+"\n"), 0o600)
+}
+
+// copiedActiveVersion resolves the active version where the managed shim is a
+// copied executable instead of a symlink. It validates the marker against the
+// shim bytes and falls back to content matching for pre-marker installations.
+func copiedActiveVersion(home string) string {
+	link := LinkPath(home)
+	if data, err := os.ReadFile(activeVersionPath(home)); err == nil {
+		version := strings.TrimSpace(string(data))
+		if validateVersion(version) == nil {
+			target := filepath.Join(BinDir(home), BinaryName(version))
+			if sameFileContents(link, target) {
+				return version
+			}
+		}
+	}
+	entries, err := os.ReadDir(BinDir(home))
+	if err != nil {
+		return ""
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if runtime.GOOS == "windows" {
+			name = strings.TrimSuffix(name, ".exe")
+		}
+		if !strings.HasPrefix(name, "coact-") {
+			continue
+		}
+		if sameFileContents(link, filepath.Join(BinDir(home), entry.Name())) {
+			return strings.TrimPrefix(name, "coact-")
+		}
+	}
+	return ""
+}
+
+func sameFileContents(left, right string) bool {
+	leftInfo, err := os.Stat(left)
+	if err != nil {
+		return false
+	}
+	rightInfo, err := os.Stat(right)
+	if err != nil || leftInfo.Size() != rightInfo.Size() {
+		return false
+	}
+	leftHash, err := fileSHA256(left)
+	if err != nil {
+		return false
+	}
+	rightHash, err := fileSHA256(right)
+	return err == nil && leftHash == rightHash
+}
+
+func fileSHA256(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
