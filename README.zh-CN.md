@@ -20,7 +20,7 @@
 </div>
 
 <p align="center">
-  <img src="assets/demo/coact-demo.gif" alt="CoAct 演示：两个在线 coding agents 共同协调任务、文件锁、lead planning 与完成反馈" width="960">
+  <img src="assets/demo/coact-demo.webp" alt="CoAct 演示：两个在线 coding agents 共同协调任务、文件锁、lead planning 与完成反馈" width="960">
 </p>
 <p align="center"><em>两个原生 agent terminal，一套共享规划、任务看板、安全层与审计记录。</em></p>
 

@@ -20,7 +20,7 @@
 </div>
 
 <p align="center">
-  <img src="assets/demo/coact-demo.gif" alt="CoAct demo showing two live coding agents coordinating tasks, file locks, lead planning, and completion feedback" width="960">
+  <img src="assets/demo/coact-demo.webp" alt="CoAct demo showing two live coding agents coordinating tasks, file locks, lead planning, and completion feedback" width="960">
 </p>
 <p align="center"><em>Two native agent terminals. One shared plan, task board, safety layer, and audit trail.</em></p>
 
