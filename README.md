@@ -1,29 +1,65 @@
-# CoAct
+<div align="center">
+  <img src="assets/mascot/icon.png" alt="CoBot, the CoAct robot astronaut mascot" width="132">
+  <h1>CoAct</h1>
+  <p><strong>Coordinate Claude Code, Codex, and Antigravity in one repository—without replacing their native terminals.</strong></p>
 
-**English** · [中文](README.zh-CN.md)
+  <p>
+    <a href="https://github.com/tianyi-zhang-02/coact/releases/latest"><img alt="Latest CoAct release" src="https://img.shields.io/github/v/release/tianyi-zhang-02/coact?style=flat-square"></a>
+    <a href="https://github.com/tianyi-zhang-02/coact/actions/workflows/ci.yml"><img alt="Continuous integration status" src="https://img.shields.io/github/actions/workflow/status/tianyi-zhang-02/coact/ci.yml?branch=main&amp;style=flat-square&amp;label=CI"></a>
+    <a href="https://github.com/tianyi-zhang-02/coact/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/tianyi-zhang-02/coact?style=flat-square"></a>
+    <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/tianyi-zhang-02/coact?style=flat-square"></a>
+  </p>
+  <p>
+    <img alt="Go 1.22 or newer" src="https://img.shields.io/badge/Go-1.22%2B-00ADD8?style=flat-square&amp;logo=go&amp;logoColor=white">
+    <img alt="Supported platforms: macOS, Linux, and Windows" src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-5865F2?style=flat-square">
+    <a href="README.md"><img alt="English documentation" src="https://img.shields.io/badge/docs-English-2F81F7?style=flat-square"></a>
+    <a href="README.zh-CN.md"><img alt="Simplified Chinese documentation" src="https://img.shields.io/badge/docs-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-EA4335?style=flat-square"></a>
+  </p>
 
-<img src="assets/mascot/icon.png" alt="CoBot, the CoAct robot astronaut" width="140">
+  <p><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a> · <a href="docs/FEATURES.md">Feature status</a> · <a href="SECURITY.md">Security</a></p>
+</div>
 
-**Let Claude Code, Codex, and Antigravity collaborate in the same repository—while
-each keeps its native terminal.**
+CoAct is a local coordination and safety layer for coding agents. It keeps each
+agent in its familiar CLI while adding shared memory, structured planning, task
+ownership, direct messages, write-intent locks, usage alerts, collaboration
+reports, and an auditable journal.
 
-CoAct is a local coordination and safety layer for coding agents. It gives them
-shared project memory, structured planning, task ownership, direct `@agent`
-messages, write-intent locks, usage alerts, collaboration reports, and an audit
-trail. It does not replace an agent CLI or model provider.
+> **CoAct coordinates agents; it is not another model provider, terminal, or
+> autonomous coding agent.** Install and authenticate each agent CLI separately.
 
-## Start in two minutes
+## Why CoAct?
 
-Install CoAct on your `PATH`, then initialize a repository once:
+| Without CoAct | With CoAct |
+|---|---|
+| Copy context between terminals | Shared project memory and inboxes |
+| Agents choose overlapping work | Explicit tasks, owners, claims, and locks |
+| Decisions disappear in chat history | Local planning files and an audit journal |
+| Hard to compare teamwork | Usage alerts and evidence-labeled collaboration reports |
+| Constantly inspect every terminal | One status command or an optional visual Station |
+
+## Quick start
+
+### 1. Install
+
+Download a prebuilt binary from the [latest release](https://github.com/tianyi-zhang-02/coact/releases/latest),
+or install with Go 1.22+:
 
 ```sh
 go install github.com/tianyi-zhang-02/coact/cmd/coact@v1.0.0
+```
+
+Make sure the installed binary is on your `PATH`, then initialize a project:
+
+```sh
 cd your-project
 coact init
 coact doctor
 ```
 
-Open one native terminal per agent:
+### 2. Launch the agents you already use
+
+Open one native terminal per agent. One agent works too; collaboration activates
+when multiple live agents share the same initialized workspace.
 
 ```sh
 # terminal 1
@@ -32,42 +68,40 @@ coact claude
 # terminal 2
 coact codex
 
-# optional terminal 3
+# optional terminal 3 — launches the native `agy` CLI
 coact antigravity
 ```
 
-Antigravity uses the native `agy` CLI and is CoAct's third built-in agent.
+| Built-in launcher | Native CLI | Coordination enforcement |
+|---|---|---|
+| Claude Code | `claude` | Hook hard-blocks conflicting paths |
+| OpenAI Codex | `codex` | Injected contract; worktrees available |
+| Antigravity | `agy` | Injected contract; worktrees available |
 
-You do **not** need a separate management terminal. In any agent prompt, ask it
-to run a CoAct command, or run commands in any normal shell:
+### 3. Coordinate from any terminal
+
+You do **not** need a separate management terminal:
 
 ```sh
+coact @all "Read the project brief and propose a plan."
 coact @codex "Review Claude's proposal before implementation."
-coact @all "Read the new brief and propose a plan."
 coact inbox
+coact board
 coact status
 ```
 
-The launcher sets `COACT_AGENT`, `COACT_BIN`, and `PATH`, so an agent launched
-with `/some/path/coact codex` can still run bare `coact inbox`.
+The launcher sets `COACT_AGENT`, `COACT_BIN`, and `PATH`, so agents launched with
+an absolute CoAct binary path can still run commands such as `coact inbox`.
 
 `v1.0.0` is the first stable terminal-native coordination release.
 
-### Optional orbital station
+## Optional visual Station <sup>Beta</sup>
 
-Run `coact ui` for a local visual status view. The Station maps real agent
-heartbeats, task ownership, planning/review events, locks, messages, memory sync,
-and audit activity into an original animated pixel spaceship. Crew use a
-collision-aware navigation mesh and expandable workstations; local service bots
-visualize coordination duties. Agents stay in their native terminals: Station
-never reads terminal input or acts as an embedded terminal replacement. It binds
-to loopback, respects reduced-motion preferences, and keeps all mutations behind
-the existing per-run CSRF gate. A newly completed task triggers a short,
-theme-specific celebration. When a live agent has been waiting long enough,
-Station may suggest a free teammate: the human can send a help offer or approve
-an explicit handoff that reassigns active tasks, releases the old owner's locks,
-notifies the recipient, and journals the decision. Suggestions are heuristic;
-handoff is never automatic.
+Run `coact ui` for a loopback-only visual status view of live agents, tasks,
+locks, messages, planning events, and audit activity. Agents still work in their
+native terminals; Station does not capture terminal input or replace the CLI.
+Animations can be disabled, and handoffs always require explicit human approval.
+See [Feature status](docs/FEATURES.md) for current limitations.
 
 ## The normal workflow
 

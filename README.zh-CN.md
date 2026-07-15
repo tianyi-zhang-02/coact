@@ -1,27 +1,64 @@
-# CoAct
+<div align="center">
+  <img src="assets/mascot/icon.png" alt="CoAct 机器人宇航员吉祥物 CoBot" width="132">
+  <h1>CoAct</h1>
+  <p><strong>让 Claude Code、Codex 和 Antigravity 在同一个仓库协作，同时保留各自熟悉的原生终端。</strong></p>
 
-[English](README.md) · **中文**
+  <p>
+    <a href="https://github.com/tianyi-zhang-02/coact/releases/latest"><img alt="CoAct 最新版本" src="https://img.shields.io/github/v/release/tianyi-zhang-02/coact?style=flat-square"></a>
+    <a href="https://github.com/tianyi-zhang-02/coact/actions/workflows/ci.yml"><img alt="持续集成状态" src="https://img.shields.io/github/actions/workflow/status/tianyi-zhang-02/coact/ci.yml?branch=main&amp;style=flat-square&amp;label=CI"></a>
+    <a href="https://github.com/tianyi-zhang-02/coact/stargazers"><img alt="GitHub Stars" src="https://img.shields.io/github/stars/tianyi-zhang-02/coact?style=flat-square"></a>
+    <a href="LICENSE"><img alt="MIT 开源协议" src="https://img.shields.io/github/license/tianyi-zhang-02/coact?style=flat-square"></a>
+  </p>
+  <p>
+    <img alt="需要 Go 1.22 或更新版本" src="https://img.shields.io/badge/Go-1.22%2B-00ADD8?style=flat-square&amp;logo=go&amp;logoColor=white">
+    <img alt="支持 macOS、Linux 和 Windows" src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-5865F2?style=flat-square">
+    <a href="README.md"><img alt="英文文档" src="https://img.shields.io/badge/docs-English-2F81F7?style=flat-square"></a>
+    <a href="README.zh-CN.md"><img alt="简体中文文档" src="https://img.shields.io/badge/docs-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-EA4335?style=flat-square"></a>
+  </p>
 
-<img src="assets/mascot/icon.png" alt="CoAct 机器人宇航员 CoBot" width="140">
+  <p><a href="README.md">English</a> · <strong>简体中文</strong> · <a href="docs/FEATURES.md">功能状态</a> · <a href="SECURITY.md">安全说明</a></p>
+</div>
 
-**让 Claude Code、Codex 和 Antigravity 在同一个仓库协作，同时保留各自原生 terminal。**
+CoAct 是本地的多 agent 协作与安全层。每个 agent 继续使用原来的 CLI，CoAct 负责补充
+共享项目记忆、共同规划、任务归属、直接消息、写入意图锁、用量提醒、合作报告和可审计
+journal。
 
-CoAct 是本地的多 agent 协作与安全层：共享项目记忆、共同规划、任务归属、`@agent`
-消息、写入意图锁、用量提醒、合作报告和审计记录。它不会替代 agent CLI，也不是模型
-提供方。
+> **CoAct 负责协调，不是新的模型提供方、终端或自主 coding agent。** 每个 agent CLI
+> 仍需单独安装并完成登录。
 
-## 两分钟开始
+## 为什么使用 CoAct？
 
-先把 CoAct 安装到 `PATH`，然后在每个项目初始化一次：
+| 没有 CoAct | 使用 CoAct |
+|---|---|
+| 在不同终端间复制 context | 共享项目记忆与 inbox |
+| 多个 agent 可能抢同一任务 | 明确的 task、owner、claim 和 lock |
+| 决策散落在聊天历史 | 本地 planning files 与 audit journal |
+| 很难复盘合作质量 | 用量提醒与带证据标签的合作报告 |
+| 必须反复检查每个终端 | 一个状态命令，或可选可视化 Station |
+
+## 快速开始
+
+### 1. 安装
+
+可以从 [最新 Release](https://github.com/tianyi-zhang-02/coact/releases/latest) 下载预编译版本，
+也可以使用 Go 1.22+ 安装：
 
 ```sh
 go install github.com/tianyi-zhang-02/coact/cmd/coact@v1.0.0
+```
+
+确认 binary 已加入 `PATH`，然后在项目中初始化一次：
+
+```sh
 cd your-project
 coact init
 coact doctor
 ```
 
-每个 agent 使用一个原生 terminal：
+### 2. 启动你已经在使用的 agent
+
+每个 agent 使用一个原生 terminal。只启动一个 agent 也可以；多个 live agents 位于同一个
+已初始化 workspace 时，协作功能会自动生效。
 
 ```sh
 # terminal 1
@@ -30,38 +67,39 @@ coact claude
 # terminal 2
 coact codex
 
-# 可选 terminal 3
+# 可选 terminal 3 —— 启动原生 `agy` CLI
 coact antigravity
 ```
 
-Antigravity 使用原生 `agy` CLI，是 CoAct 内置的第三个 agent。
+| 内置 launcher | 原生 CLI | 协作保护方式 |
+|---|---|---|
+| Claude Code | `claude` | hook 硬拦截冲突路径 |
+| OpenAI Codex | `codex` | 注入协作 contract；可使用 worktree |
+| Antigravity | `agy` | 注入协作 contract；可使用 worktree |
 
-不需要额外开启第三个“管理 terminal”。你可以在任意 agent 对话里让它执行 CoAct
-命令，也可以在普通 shell 里执行：
+### 3. 从任意终端协调
+
+你**不需要**额外开启一个管理 terminal：
 
 ```sh
+coact @all "读取项目 brief，并分别提出方案。"
 coact @codex "实现前先 review Claude 的 proposal。"
-coact @all "读取新 brief，并分别提出方案。"
 coact inbox
+coact board
 coact status
 ```
 
-launcher 会设置 `COACT_AGENT`、`COACT_BIN` 和 `PATH`。即使你用
-`/some/path/coact codex` 启动，agent 仍然可以直接运行 `coact inbox`。
+launcher 会设置 `COACT_AGENT`、`COACT_BIN` 和 `PATH`，因此即使用 CoAct binary 的
+绝对路径启动 agent，它仍然可以直接执行 `coact inbox` 等命令。
 
 `v1.0.0` 是第一个稳定的 terminal-native coordination release。
 
-### 可选轨道站界面
+## 可选可视化 Station <sup>Beta</sup>
 
-运行 `coact ui` 可以打开本地可视化状态页。Station 会把真实 agent heartbeat、任务
-归属、planning/review 事件、locks、messages、memory sync 和审计活动映射到原创动态
-像素飞船。Crew 会沿带碰撞检测的导航网格移动，工位可以扩展；本地功能机器人负责
-呈现不同的协调职责。Agent 仍在各自原生 terminal 中工作；Station 不读取 terminal
-输入，也不会替代或模拟 terminal。UI 只绑定 loopback、尊重 reduced-motion 设置，
-所有写操作继续使用现有的 per-run CSRF 安全门。任务完成后会触发短暂、随地图变化的
-庆祝效果；当一个 live agent 等待较久时，Station 会建议空闲队友提供帮助。Human
-可以先发送 help offer，也可以明确确认 handoff：重新分配 active tasks、释放原 owner
-locks、通知接手者并记录 journal。等待判断只是 heuristic，handoff 永远不会自动执行。
+运行 `coact ui` 可以打开只绑定 loopback 的本地状态页，查看 live agents、tasks、locks、
+messages、planning events 和审计活动。Agent 仍在各自原生 terminal 中工作；Station 不
+读取 terminal 输入，也不会替代 CLI。动画可以关闭，handoff 必须由 human 明确确认。
+当前限制见 [功能状态](docs/FEATURES.md)。
 
 ## 日常工作流
 
