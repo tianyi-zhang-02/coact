@@ -13,8 +13,8 @@ agent adapter has identical enforcement strength.
 | `init` / `doctor` / contract migration | Ready | Yes | Re-run `coact init` after upgrading to refresh generated contracts and config migrations. |
 | Claude/Codex/Antigravity native launchers | Ready | Yes | The underlying agent CLI must already be installed and authenticated. |
 | Shared team policy and project memory | Ready | Yes | Human-controlled local context; never store secrets. |
-| Planning runs and final distributor | Ready | Yes | `plan finalize` validates distributor/readiness/locks and creates assigned board tasks; agents still need a turn to read inbox and CoAct does not autonomously wake them. |
-| Board add/assign/claim/done, reopen, and handoff | Ready | Yes | Strict `todo → claimed → doing → done` transitions are coordinated locally, not synced to an external issue tracker. |
+| Lead planning and approval gate | Ready | Yes | Default review mode requires lead submit + human approve; `--approval auto` skips approval but does not autonomously wake agents. |
+| Board add/assign/claim/done, reopen, and handoff | Ready | Yes | Dashboard shows a short description; the full local prompt is stored separately and sent only to the assigned agent. |
 | Inbox and `@agent` / `@all` | Ready (turn-based) | Yes | `@all` targets live workspace agents; offline direct messages remain available with `@agent`. |
 | Locks and policy | Ready, asymmetric | Yes | Claude is L2 hook-enforced; Codex/Antigravity are L1 contract-enforced in shared mode. |
 | Worktree isolation and merge gate | Ready (basic) | Yes | Merge conflicts stop for human resolution; no automatic conflict solver. |
@@ -33,9 +33,11 @@ agent adapter has identical enforcement strength.
 coact init
 coact doctor
 coact status
-coact plan --with codex,claude --distributor human "Small dogfood task"
+coact plan --with codex,claude --lead codex "Small dogfood task"
 # after proposals are ready and final-plan.md lists execution tasks:
-coact plan finalize --agent human
+coact plan submit --agent codex
+coact plan approve
+coact plan finalize --agent codex
 ```
 
 Then verify one agent can claim a task, a second agent sees it, a conflicting

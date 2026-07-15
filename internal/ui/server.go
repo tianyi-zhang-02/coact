@@ -27,10 +27,12 @@ import (
 	"github.com/tianyi-zhang-02/coact/internal/journal"
 	"github.com/tianyi-zhang-02/coact/internal/lockmgr"
 	"github.com/tianyi-zhang-02/coact/internal/metalock"
+	"github.com/tianyi-zhang-02/coact/internal/planning"
 	"github.com/tianyi-zhang-02/coact/internal/platform"
 	"github.com/tianyi-zhang-02/coact/internal/presence"
 	"github.com/tianyi-zhang-02/coact/internal/project"
 	"github.com/tianyi-zhang-02/coact/internal/setup"
+	"github.com/tianyi-zhang-02/coact/internal/taskprompt"
 	"github.com/tianyi-zhang-02/coact/internal/versionmgr"
 )
 
@@ -164,6 +166,8 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/agents/", s.handleAgentAction)
 	mux.HandleFunc("/api/tasks", s.handleTasks)
 	mux.HandleFunc("/api/tasks/", s.handleTaskAction)
+	mux.HandleFunc("/api/plans", s.handlePlans)
+	mux.HandleFunc("/api/plans/approve", s.handlePlanApprove)
 	mux.HandleFunc("/api/handoff", s.handleHandoff)
 	mux.HandleFunc("/api/messages", s.handleMessages)
 	mux.HandleFunc("/api/launch-commands", s.handleLaunchCommands)
@@ -260,6 +264,7 @@ type stateResponse struct {
 	Versions    []versionmgr.LocalInfo `json:"versions"`
 	Manifest    *versionmgr.Manifest   `json:"manifest,omitempty"`
 	Projects    []projectDTO           `json:"projects"`
+	Plan        *planning.Info         `json:"plan,omitempty"`
 }
 
 type taskDTO struct {
@@ -346,6 +351,7 @@ func (s *Server) state() (*stateResponse, error) {
 		st.Mode = cfg.Mode
 		st.Brief = readString(p.BriefPath())
 		st.Tasks = readTasks(p.BoardPath())
+		st.Plan = planning.Latest(p)
 		st.Agents = readAgents(p, cfg)
 		m := lockmgr.New(p, cfg)
 		if locks, err := m.List(); err == nil {
@@ -365,6 +371,90 @@ func (s *Server) state() (*stateResponse, error) {
 		}
 	}
 	return st, nil
+}
+
+func (s *Server) handlePlans(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	p, err := s.requireProject()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	var req struct {
+		Brief        string   `json:"brief"`
+		Lead         string   `json:"lead"`
+		ApprovalMode string   `json:"approval_mode"`
+		Participants []string `json:"participants"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	cfg, err := config.Load(p.ConfigPath())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	allowed := map[string]bool{}
+	for _, agent := range cfg.Agents {
+		allowed[agent.ID] = true
+	}
+	lead := sanitizeAgent(req.Lead)
+	if !allowed[lead] {
+		writeError(w, http.StatusBadRequest, errors.New("lead must be a configured agent"))
+		return
+	}
+	participants := make([]string, 0, len(req.Participants))
+	for _, raw := range req.Participants {
+		agent := sanitizeAgent(raw)
+		if allowed[agent] {
+			participants = append(participants, agent)
+		}
+	}
+	if len(participants) == 0 {
+		participants = append(participants, lead)
+	} else if !containsString(participants, lead) {
+		participants = append(participants, lead)
+	}
+	now := time.Now().UTC()
+	runID := fmt.Sprintf("run-%s-%09d", now.Format("20060102-150405"), now.Nanosecond())
+	info, err := planning.Start(p, planning.StartOptions{
+		RunID: runID, Brief: req.Brief, Initiator: "human", Lead: lead,
+		ApprovalMode: req.ApprovalMode, Participants: participants,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, info)
+}
+
+func (s *Server) handlePlanApprove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	p, err := s.requireProject()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	info, err := planning.Approve(p, strings.TrimSpace(req.ID))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, info)
 }
 
 func readTasks(path string) []taskDTO {
@@ -478,19 +568,32 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Title string `json:"title"`
-		Owner string `json:"owner"`
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		Prompt      string `json:"prompt"`
+		Owner       string `json:"owner"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	title := strings.TrimSpace(req.Title)
-	if title == "" {
-		writeError(w, http.StatusBadRequest, errors.New("title is required"))
+	description := strings.TrimSpace(req.Description)
+	if description == "" {
+		description = strings.TrimSpace(req.Title)
+	}
+	if description == "" {
+		writeError(w, http.StatusBadRequest, errors.New("description is required"))
 		return
 	}
-	if err := board.ValidateTitle(title); err != nil {
+	if err := board.ValidateTitle(description); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	prompt := strings.TrimSpace(req.Prompt)
+	if prompt == "" {
+		prompt = description
+	}
+	if err := taskprompt.ValidatePrompt(prompt); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
@@ -500,7 +603,7 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		out = b.Add(title)
+		out = b.Add(description)
 		owner := sanitizeAgent(req.Owner)
 		if owner != "" {
 			if assigned, err := b.Assign(out.ID, owner); err == nil {
@@ -509,7 +612,11 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 		}
+		if err := taskprompt.Write(p.TasksDir(), taskprompt.Detail{ID: out.ID, Description: description, Prompt: prompt}); err != nil {
+			return err
+		}
 		if err := b.Save(); err != nil {
+			_ = os.Remove(filepath.Join(p.TasksDir(), out.ID+".md"))
 			return err
 		}
 		event := "task.add"
@@ -526,7 +633,19 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	if out.Owner != "" {
+		notifyUITaskAssigned(p, out.Owner, out.ID)
+	}
 	writeJSON(w, http.StatusOK, taskDTO{ID: out.ID, Title: out.Title, State: out.State, Owner: out.Owner})
+}
+
+func notifyUITaskAssigned(p *project.Project, owner, id string) {
+	detail, err := taskprompt.Read(p.TasksDir(), id)
+	if err != nil {
+		return
+	}
+	message := fmt.Sprintf("Assigned task %s: %s\n\nFull execution prompt:\n%s\n\nClaim it with `coact claim %s` before editing.", detail.ID, detail.Description, detail.Prompt, detail.ID)
+	_ = inbox.Send(p.InboxDir(), "human", owner, message)
 }
 
 func (s *Server) handleTaskAction(w http.ResponseWriter, r *http.Request) {
@@ -598,6 +717,9 @@ func (s *Server) handleTaskAction(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
+	}
+	if action == "assign" {
+		notifyUITaskAssigned(p, owner, out.ID)
 	}
 	writeJSON(w, http.StatusOK, taskDTO{ID: out.ID, Title: out.Title, State: out.State, Owner: out.Owner})
 }
@@ -1135,6 +1257,15 @@ func sanitizeAgent(id string) string {
 		}
 	}
 	return b.String()
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func readString(path string) string {

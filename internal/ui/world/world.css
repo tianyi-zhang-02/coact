@@ -1,7 +1,10 @@
 .pixel-world-shell {
   --pixel-border:#7186a7;
   position:relative;
-  min-height:calc(100vh - 24px);
+  width:min(100%,calc((100vh - 24px)*1.5));
+  min-height:0;
+  aspect-ratio:3/2;
+  margin-inline:auto;
   overflow:hidden;
   border:2px solid #253550;
   border-radius:4px;
@@ -66,7 +69,7 @@
 .pixel-help kbd { display:inline-block; min-width:24px; padding:2px 5px; border:1px solid #526784; background:#121b2c; color:#fff; text-align:center; }
 .pixel-world-shell.is-paused::after { content:"PAUSED"; position:absolute; z-index:3; inset:50% auto auto 50%; padding:8px 12px; border:2px solid #d8e5f8; background:#07101ed9; color:#fff; font:900 13px ui-monospace,monospace; letter-spacing:.18em; transform:translate(-50%,-50%); }
 @media (max-width:760px) {
-  .pixel-world-shell { min-height:680px; }
+  .pixel-world-shell { width:100%; min-height:min(680px,calc(100vh - 24px)); aspect-ratio:auto; }
   .pixel-world-topbar { align-items:stretch; flex-direction:column; }
   .pixel-world-right { justify-content:space-between; }
   .pixel-world-title span { display:none; }

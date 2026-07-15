@@ -43,7 +43,7 @@ func Initialize(root, agent string) (*Result, error) {
 	p := &project.Project{Root: root, CheckoutRoot: root}
 	for _, d := range []string{
 		p.CoactDir(), p.LocksDir(), p.SessionDir(), p.InboxDir(), p.JournalDir(),
-		p.MemoryDir(), p.RunsDir(), p.UsageDir(), p.EvaluationDir(),
+		p.MemoryDir(), p.RunsDir(), p.TasksDir(), p.UsageDir(), p.EvaluationDir(),
 	} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return nil, fmt.Errorf("creating %s: %w", d, err)
@@ -383,7 +383,7 @@ func coactBinary() string {
 func ensureGitignore(root string) {
 	path := filepath.Join(root, ".gitignore")
 	needed := []string{
-		".coact/locks/", ".coact/session/", ".coact/journal/", ".coact/inbox/", ".coact/terminal/", ".coact/runs/", ".coact/memory/", ".coact/usage/", ".coact/evaluations/",
+		".coact/locks/", ".coact/session/", ".coact/journal/", ".coact/inbox/", ".coact/terminal/", ".coact/runs/", ".coact/tasks/", ".coact/memory/", ".coact/usage/", ".coact/evaluations/",
 	}
 	var content string
 	if data, err := os.ReadFile(path); err == nil {
@@ -462,9 +462,10 @@ read it at the start of every session, before planning, and before claiming work
 2. Read your inbox with coact inbox.
 3. During planning, write your proposal under .coact/runs/<run>/proposals/<agent>.md.
 4. Read peer proposals before finalizing execution tasks.
-5. The final distributor writes .coact/runs/<run>/final-plan.md and creates board tasks.
-6. Claim tasks with coact claim <id> before editing.
-7. Lock files or directories before editing unless your adapter has a hard CoAct hook.
+5. The lead writes .coact/runs/<run>/final-plan.md using a short description and full Prompt for each task.
+6. By default, the lead submits the plan and waits for explicit human approval before distributing tasks.
+7. Claim tasks with coact claim <id> before editing.
+8. Lock files or directories before editing unless your adapter has a hard CoAct hook.
 
 `
 

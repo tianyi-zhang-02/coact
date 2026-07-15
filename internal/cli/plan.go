@@ -11,11 +11,14 @@ import (
 	"unicode"
 
 	"github.com/tianyi-zhang-02/coact/internal/board"
+	"github.com/tianyi-zhang-02/coact/internal/config"
 	"github.com/tianyi-zhang-02/coact/internal/inbox"
 	"github.com/tianyi-zhang-02/coact/internal/journal"
 	"github.com/tianyi-zhang-02/coact/internal/lockmgr"
+	"github.com/tianyi-zhang-02/coact/internal/planning"
 	"github.com/tianyi-zhang-02/coact/internal/platform"
 	"github.com/tianyi-zhang-02/coact/internal/project"
+	"github.com/tianyi-zhang-02/coact/internal/taskprompt"
 )
 
 func cmdPlan(args []string) int {
@@ -28,20 +31,28 @@ func cmdPlan(args []string) int {
 	if len(args) > 0 && args[0] == "ready" {
 		return cmdPlanReady(args[1:])
 	}
+	if len(args) > 0 && args[0] == "submit" {
+		return cmdPlanSubmit(args[1:])
+	}
+	if len(args) > 0 && args[0] == "approve" {
+		return cmdPlanApprove(args[1:])
+	}
 
 	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
 	agentFlag := fs.String("agent", "", "initiator id")
 	withFlag := fs.String("with", "codex,claude", "comma-separated planning agents")
 	distributorFlag := fs.String("distributor", "", "final task distributor (human, codex, claude, antigravity, vote)")
+	leadFlag := fs.String("lead", "", "lead planning agent (alias for --distributor)")
+	approvalFlag := fs.String("approval", "review", "review (default) or auto (dangerous)")
 	idFlag := fs.String("id", "", "run id (default: timestamp)")
 	pos, err := parseInterspersed(fs, args)
 	if err != nil || len(pos) == 0 {
-		fmt.Fprintln(os.Stderr, `usage: coact plan [--with codex,claude] [--distributor codex] "brief..."`)
+		fmt.Fprintln(os.Stderr, `usage: coact plan [--with codex,claude] [--lead codex] [--approval review|auto] "brief..."`)
 		return 2
 	}
 	brief := strings.TrimSpace(strings.Join(pos, " "))
 	if brief == "" {
-		fmt.Fprintln(os.Stderr, `usage: coact plan [--with codex,claude] [--distributor codex] "brief..."`)
+		fmt.Fprintln(os.Stderr, `usage: coact plan [--with codex,claude] [--lead codex] [--approval review|auto] "brief..."`)
 		return 2
 	}
 
@@ -55,55 +66,64 @@ func cmdPlan(args []string) int {
 		fmt.Fprintln(os.Stderr, "coact plan: --with must name at least one agent")
 		return 2
 	}
-	distributor := sanitizeAgent(*distributorFlag)
-	if *distributorFlag == "" {
+	if *leadFlag != "" && *distributorFlag != "" && sanitizeAgent(*leadFlag) != sanitizeAgent(*distributorFlag) {
+		fmt.Fprintln(os.Stderr, "coact plan: --lead and --distributor disagree")
+		return 2
+	}
+	rawDistributor := *distributorFlag
+	if *leadFlag != "" {
+		rawDistributor = *leadFlag
+	}
+	distributor := sanitizeAgent(rawDistributor)
+	if rawDistributor == "" {
 		distributor = defaultDistributor(p)
+	}
+	approval := planning.NormalizeApprovalMode(*approvalFlag)
+	if approval == "" {
+		fmt.Fprintln(os.Stderr, "coact plan: --approval must be review or auto")
+		return 2
+	}
+	if approval == "auto" && (distributor == "human" || distributor == "vote") {
+		fmt.Fprintln(os.Stderr, "coact plan: --approval auto requires an agent lead")
+		return 2
 	}
 	runID := safeRunID(*idFlag)
 	if runID == "" {
 		runID = "run-" + time.Now().UTC().Format("20060102-150405")
 	}
 
-	runDir := filepath.Join(p.RunsDir(), runID)
-	if err := os.MkdirAll(filepath.Join(runDir, "proposals"), 0o755); err != nil {
+	if _, err := planning.Start(p, planning.StartOptions{RunID: runID, Brief: brief, Initiator: initiator, Lead: distributor, ApprovalMode: approval, Participants: participants}); err != nil {
 		fmt.Fprintf(os.Stderr, "coact plan: %v\n", err)
 		return 1
 	}
-	if err := os.MkdirAll(filepath.Join(runDir, "notes"), 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "coact plan: %v\n", err)
-		return 1
-	}
-	if err := writePlanFiles(p, runDir, runID, brief, initiator, distributor, participants); err != nil {
-		fmt.Fprintf(os.Stderr, "coact plan: %v\n", err)
-		return 1
-	}
-	for _, agent := range participants {
-		if err := inbox.Send(p.InboxDir(), initiator, agent, planMessage(runID, distributor, agent)); err != nil {
-			fmt.Fprintf(os.Stderr, "coact plan: %v\n", err)
-			return 1
-		}
-	}
-	_ = journal.Append(p.JournalDir(), initiator, "plan.start", map[string]string{
-		"id":          runID,
-		"with":        strings.Join(participants, ","),
-		"distributor": distributor,
-	})
 	fmt.Printf("planning run %s created\n", runID)
 	fmt.Printf("brief: .coact/runs/%s/brief.md\n", runID)
 	fmt.Printf("participants: %s\n", strings.Join(participants, ", "))
 	fmt.Printf("final distributor: %s\n", distributor)
+	fmt.Printf("approval: %s\n", approval)
+	if approval == "review" {
+		if distributor == "human" || distributor == "vote" {
+			fmt.Printf("safety gate: human reviews the final plan, then runs `coact plan approve %s` before finalizing\n", runID)
+		} else {
+			fmt.Printf("safety gate: lead submits with `coact plan submit %s`; human approves with `coact plan approve %s`\n", runID, runID)
+		}
+	} else {
+		fmt.Println("warning: auto distribution enabled; the lead may finalize without human approval")
+	}
 	return 0
 }
 
 type executionTask struct {
-	Owner string
-	Title string
+	Owner  string
+	Title  string
+	Prompt string
 }
 
 type createdExecutionTask struct {
-	ID    string
-	Owner string
-	Title string
+	ID     string
+	Owner  string
+	Title  string
+	Prompt string
 }
 
 func cmdPlanFinalize(args []string) int {
@@ -160,8 +180,14 @@ func cmdPlanFinalize(args []string) int {
 		fmt.Fprintf(os.Stderr, "coact plan finalize: %s is already finalized\n", runID)
 		return 1
 	}
-	if status != "pending" {
-		fmt.Fprintf(os.Stderr, "coact plan finalize: final plan status is %s, not pending\n", status)
+	approval := planApprovalMode(briefPath)
+	allowedStatus := status == "pending" && approval == "auto" || status == "approved" && approval == "review"
+	if !allowedStatus {
+		if approval == "review" {
+			fmt.Fprintf(os.Stderr, "coact plan finalize: final plan status is %s; lead must submit and human must approve first\n", status)
+		} else {
+			fmt.Fprintf(os.Stderr, "coact plan finalize: final plan status is %s, not pending\n", status)
+		}
 		return 1
 	}
 	participants := planParticipants(briefPath)
@@ -218,21 +244,19 @@ func cmdPlanFinalize(args []string) int {
 			return err
 		}
 		for _, task := range tasks {
-			added := sharedBoard.Add(task.Title)
-			createdTask := createdExecutionTask{ID: added.ID, Owner: task.Owner, Title: task.Title}
-			if task.Owner != "" {
-				assigned, err := sharedBoard.Assign(added.ID, task.Owner)
-				if err != nil {
-					return err
-				}
-				createdTask.ID = assigned.ID
+			added, err := addTaskWithPrompt(p, sharedBoard, task.Title, task.Prompt, task.Owner)
+			if err != nil {
+				return err
 			}
+			createdTask := createdExecutionTask{ID: added.ID, Owner: task.Owner, Title: task.Title, Prompt: task.Prompt}
 			created = append(created, createdTask)
 		}
 		if err := sharedBoard.Save(); err != nil {
+			removeCreatedTaskPrompts(p, created)
 			return err
 		}
 		if err := markPlanFinalized(finalPath, created); err != nil {
+			removeCreatedTaskPrompts(p, created)
 			if rollbackErr := platform.AtomicWrite(p.BoardPath(), originalBoard, 0o644); rollbackErr != nil {
 				return fmt.Errorf("updating final plan: %v; rolling back board: %v", err, rollbackErr)
 			}
@@ -266,6 +290,136 @@ func cmdPlanFinalize(args []string) int {
 		fmt.Printf("  %s  %-10s %s\n", task.ID, owner, task.Title)
 	}
 	return 0
+}
+
+func cmdPlanSubmit(args []string) int {
+	fs := flag.NewFlagSet("plan submit", flag.ContinueOnError)
+	agentFlag := fs.String("agent", "", "lead planning agent id")
+	positionals, err := parseInterspersed(fs, args)
+	if err != nil || len(positionals) > 1 {
+		fmt.Fprintln(os.Stderr, "usage: coact plan submit [--agent id] [run-id]")
+		return 2
+	}
+	p, cfg, ok := loadProject()
+	if !ok {
+		return 1
+	}
+	runID := latestOrRequestedRunID(p, positionals)
+	if runID == "" {
+		fmt.Fprintln(os.Stderr, "coact plan submit: no planning run found")
+		return 1
+	}
+	runDir := filepath.Join(p.RunsDir(), runID)
+	briefPath := filepath.Join(runDir, "brief.md")
+	finalPath := filepath.Join(runDir, "final-plan.md")
+	distributor := planDistributor(briefPath)
+	actor := agentID(*agentFlag)
+	if distributor == "human" || distributor == "vote" || actor != distributor {
+		fmt.Fprintf(os.Stderr, "coact plan submit: %s is not the agent lead (%s)\n", actor, distributor)
+		return 1
+	}
+	if planApprovalMode(briefPath) != "review" {
+		fmt.Fprintln(os.Stderr, "coact plan submit: this run uses auto approval; the lead can finalize directly")
+		return 1
+	}
+	if status := documentStatus(finalPath); status != "pending" {
+		fmt.Fprintf(os.Stderr, "coact plan submit: final plan status is %s, not pending\n", status)
+		return 1
+	}
+	if err := validatePlanReady(p, cfg, runDir, planParticipants(briefPath)); err != nil {
+		fmt.Fprintf(os.Stderr, "coact plan submit: %v\n", err)
+		return 1
+	}
+	data, err := os.ReadFile(finalPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "coact plan submit: %v\n", err)
+		return 1
+	}
+	tasks, err := parseExecutionTasks(string(data))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "coact plan submit: %v\n", err)
+		return 1
+	}
+	allowedOwners := map[string]bool{}
+	for _, participant := range planParticipants(briefPath) {
+		allowedOwners[participant] = true
+	}
+	for _, task := range tasks {
+		if task.Owner != "" && !allowedOwners[task.Owner] {
+			fmt.Fprintf(os.Stderr, "coact plan submit: task owner %q is not a planning participant\n", task.Owner)
+			return 1
+		}
+	}
+	if err := setDocumentStatus(finalPath, "review"); err != nil {
+		fmt.Fprintf(os.Stderr, "coact plan submit: %v\n", err)
+		return 1
+	}
+	_ = journal.Append(p.JournalDir(), actor, "plan.submit", map[string]string{"id": runID})
+	_ = inbox.Send(p.InboxDir(), actor, "human", fmt.Sprintf("Planning run %s is ready for review. Read `.coact/runs/%s/final-plan.md`, then approve with `coact plan approve %s` or edit/reject the plan.", runID, runID, runID))
+	fmt.Printf("planning run %s submitted for human review\n", runID)
+	fmt.Printf("review: .coact/runs/%s/final-plan.md\n", runID)
+	fmt.Printf("approve: coact plan approve %s\n", runID)
+	return 0
+}
+
+func cmdPlanApprove(args []string) int {
+	fs := flag.NewFlagSet("plan approve", flag.ContinueOnError)
+	agentFlag := fs.String("agent", "", "approver id (must be human)")
+	positionals, err := parseInterspersed(fs, args)
+	if err != nil || len(positionals) > 1 {
+		fmt.Fprintln(os.Stderr, "usage: coact plan approve [run-id]")
+		return 2
+	}
+	p, _, ok := loadProject()
+	if !ok {
+		return 1
+	}
+	actor := agentID(*agentFlag)
+	if actor != "human" {
+		fmt.Fprintln(os.Stderr, "coact plan approve: only the human operator can approve a review-gated plan")
+		return 1
+	}
+	runID := latestOrRequestedRunID(p, positionals)
+	if runID == "" {
+		fmt.Fprintln(os.Stderr, "coact plan approve: no planning run found")
+		return 1
+	}
+	info, err := planning.Approve(p, runID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "coact plan approve: %v\n", err)
+		return 1
+	}
+	fmt.Printf("planning run %s approved\n", runID)
+	fmt.Printf("lead %s may now finalize and distribute tasks\n", info.Lead)
+	return 0
+}
+
+func latestOrRequestedRunID(p *project.Project, positionals []string) string {
+	if len(positionals) == 1 {
+		return safeRunID(positionals[0])
+	}
+	return latestRunID(p)
+}
+
+func validatePlanReady(p *project.Project, cfg *config.Config, runDir string, participants []string) error {
+	if len(participants) == 0 {
+		return fmt.Errorf("planning brief has no participants")
+	}
+	manager := lockmgr.New(p, cfg)
+	locks, err := manager.List()
+	if err != nil {
+		return fmt.Errorf("reading locks: %w", err)
+	}
+	for _, participant := range participants {
+		proposal := filepath.Join(runDir, "proposals", participant+".md")
+		if status := proposalStatus(proposal); status != "ready" {
+			return fmt.Errorf("proposal for %s is %s, not ready", participant, status)
+		}
+		if owner := lockOwnerFor(locks, planRelPath(p, proposal)); owner != "" {
+			return fmt.Errorf("proposal for %s is still locked by %s", participant, owner)
+		}
+	}
+	return nil
 }
 
 func cmdPlanReady(args []string) int {
@@ -348,6 +502,11 @@ func cmdPlanStatus(args []string) int {
 	}
 	runDir := filepath.Join(p.RunsDir(), runID)
 	fmt.Printf("planning run: %s\n", runID)
+	if info := planning.Read(p, runID); info != nil {
+		fmt.Printf("  lead: %s\n", info.Lead)
+		fmt.Printf("  approval: %s\n", info.ApprovalMode)
+		fmt.Printf("  final status: %s\n", info.Status)
+	}
 	for _, rel := range []string{"brief.md", "final-plan.md"} {
 		path := filepath.Join(runDir, rel)
 		if _, err := os.Stat(path); err == nil {
@@ -382,117 +541,6 @@ func cmdPlanStatus(args []string) int {
 	fmt.Println()
 	fmt.Println("final distributor should wait until all required proposals are ready and unlocked.")
 	return 0
-}
-
-func writePlanFiles(p *project.Project, runDir, runID, brief, initiator, distributor string, participants []string) error {
-	doc := fmt.Sprintf(`# CoAct planning run %s
-
-## Brief
-
-%s
-
-## Protocol
-
-1. Every planning agent reads .coact/team.md, .coact/memory/project.md, and this file.
-2. Every planning agent writes one proposal to .coact/runs/%s/proposals/<agent>.md.
-3. Every planning agent runs coact plan ready %s after finishing its proposal; this marks it ready and releases the command's lock.
-4. Every planning agent reads peer proposals and may add second-pass notes under .coact/runs/%s/notes/<agent>.md.
-5. The final distributor runs coact plan status %s and waits until all required proposals are ready and unlocked.
-6. The final distributor writes .coact/runs/%s/final-plan.md and lists tasks under the Execution tasks heading.
-7. The final distributor runs coact plan finalize %s to create and assign board tasks.
-8. Agents claim tasks before implementation with coact claim <id>.
-
-## Metadata
-
-- initiator: %s
-- participants: %s
-- final_task_distributor: %s
-- created_at: %s
-
-`, runID, brief, runID, runID, runID, runID, runID, runID, initiator, strings.Join(participants, ", "), distributor, time.Now().UTC().Format(time.RFC3339))
-	if err := platform.AtomicWrite(filepath.Join(runDir, "brief.md"), []byte(doc), 0o644); err != nil {
-		return err
-	}
-	final := fmt.Sprintf(`# Final plan for %s
-
-Status: pending
-Distributor: %s
-
-Do not finalize until coact plan status %s shows all required proposals are ready and unlocked.
-When proposals are ready, summarize the decision and replace the examples below.
-
-## Decision
-
-## Execution tasks
-
-<!-- Add one task per line. Example: - [codex] Implement the agreed change -->
-<!-- Use [unassigned] when the distributor wants an agent to claim it later. -->
-
-Run: coact plan finalize %s
-
-`, runID, distributor, runID, runID)
-	if err := platform.AtomicWrite(filepath.Join(runDir, "final-plan.md"), []byte(final), 0o644); err != nil {
-		return err
-	}
-	for _, agent := range participants {
-		path := filepath.Join(runDir, "proposals", agent+".md")
-		if _, err := os.Stat(path); err == nil {
-			continue
-		}
-		template := fmt.Sprintf(`# Proposal: %s
-
-Run: %s
-Status: draft
-
-When complete, run: coact plan ready %s
-
-## Proposed approach
-
-## Risks
-
-## Suggested tasks
-
-`, agent, runID, runID)
-		if err := platform.AtomicWrite(path, []byte(template), 0o644); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func planMessage(runID, distributor, recipient string) string {
-	role := "planning participant"
-	if recipient == distributor {
-		role = "final task distributor"
-	}
-	return fmt.Sprintf(`Planning phase %s started.
-
-Your role: %s.
-
-Read:
-- .coact/team.md
-- .coact/memory/project.md
-- .coact/runs/%s/brief.md
-
-Write your proposal:
-- .coact/runs/%s/proposals/%s.md
-
-When complete:
-- coact plan ready %s
-
-Then read peer proposals. If you are the final distributor, write:
-- .coact/runs/%s/final-plan.md
-
-Before finalizing, run:
-- coact plan status %s
-
-Only finalize after all required proposals are ready and unlocked.
-
-After writing the Execution tasks section, run:
-- coact plan finalize %s
-
-Assigned agents then claim their task through the board before editing.
-`, runID, role, runID, runID, recipient, runID, runID, runID, runID)
 }
 
 func canFinalizePlan(actor, distributor string) bool {
@@ -533,9 +581,42 @@ func documentStatus(path string) string {
 	return "unknown"
 }
 
+func setDocumentStatus(path, status string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(data), "\n")
+	for index, line := range lines {
+		if key, _, ok := strings.Cut(strings.TrimSpace(line), ":"); ok && strings.EqualFold(strings.TrimSpace(key), "status") {
+			lines[index] = "Status: " + status
+			return platform.AtomicWrite(path, []byte(strings.Join(lines, "\n")), 0o644)
+		}
+	}
+	return fmt.Errorf("document is missing a Status field")
+}
+
+func planApprovalMode(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "review"
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "-"))
+		if key, value, ok := strings.Cut(line, ":"); ok && strings.EqualFold(strings.TrimSpace(key), "approval_mode") {
+			if mode := planning.NormalizeApprovalMode(value); mode != "" {
+				return mode
+			}
+		}
+	}
+	return "review"
+}
+
 func parseExecutionTasks(content string) ([]executionTask, error) {
 	inSection := false
 	var tasks []executionTask
+	current := -1
+	promptBlock := false
 	for _, rawLine := range strings.Split(content, "\n") {
 		line := strings.TrimSpace(rawLine)
 		if strings.HasPrefix(line, "## ") {
@@ -543,9 +624,39 @@ func parseExecutionTasks(content string) ([]executionTask, error) {
 				break
 			}
 			inSection = strings.EqualFold(strings.TrimSpace(strings.TrimPrefix(line, "## ")), "Execution tasks")
+			current = -1
+			promptBlock = false
 			continue
 		}
-		if !inSection || !strings.HasPrefix(line, "- ") {
+		if !inSection {
+			continue
+		}
+		if current >= 0 && strings.HasPrefix(line, "Prompt:") {
+			value := strings.TrimSpace(strings.TrimPrefix(line, "Prompt:"))
+			if value == "|" {
+				tasks[current].Prompt = ""
+				promptBlock = true
+			} else {
+				tasks[current].Prompt = value
+				promptBlock = false
+			}
+			continue
+		}
+		if promptBlock && current >= 0 {
+			if line == "" {
+				tasks[current].Prompt += "\n"
+				continue
+			}
+			if strings.HasPrefix(rawLine, "    ") || strings.HasPrefix(rawLine, "\t") {
+				if tasks[current].Prompt != "" && !strings.HasSuffix(tasks[current].Prompt, "\n") {
+					tasks[current].Prompt += "\n"
+				}
+				tasks[current].Prompt += strings.TrimSpace(rawLine)
+				continue
+			}
+			promptBlock = false
+		}
+		if !strings.HasPrefix(line, "- ") {
 			continue
 		}
 		body := strings.TrimSpace(strings.TrimPrefix(line, "- "))
@@ -568,13 +679,19 @@ func parseExecutionTasks(content string) ([]executionTask, error) {
 				return nil, fmt.Errorf("invalid execution task owner %q", rawOwner)
 			}
 		}
-		tasks = append(tasks, executionTask{Owner: owner, Title: title})
+		tasks = append(tasks, executionTask{Owner: owner, Title: title, Prompt: title})
+		current = len(tasks) - 1
 	}
 	if !inSection {
 		return nil, fmt.Errorf("final-plan.md is missing `## Execution tasks`")
 	}
 	if len(tasks) == 0 {
 		return nil, fmt.Errorf("final-plan.md has no execution tasks")
+	}
+	for _, task := range tasks {
+		if err := taskprompt.ValidatePrompt(task.Prompt); err != nil {
+			return nil, fmt.Errorf("invalid execution prompt for %q: %w", task.Title, err)
+		}
 	}
 	return tasks, nil
 }
@@ -613,7 +730,7 @@ func notifyPlanFinalized(p *project.Project, runID, from string, participants []
 		var assigned []string
 		for _, task := range tasks {
 			if task.Owner == participant {
-				assigned = append(assigned, fmt.Sprintf("- %s: %s", task.ID, task.Title))
+				assigned = append(assigned, fmt.Sprintf("- %s: %s\n  Full prompt: %s", task.ID, task.Title, task.Prompt))
 			}
 		}
 		message := fmt.Sprintf("Planning run %s is finalized. Read `.coact/runs/%s/final-plan.md` and `coact board`.", runID, runID)
@@ -621,6 +738,12 @@ func notifyPlanFinalized(p *project.Project, runID, from string, participants []
 			message += "\n\nYour assigned tasks:\n" + strings.Join(assigned, "\n") + "\n\nClaim one with `coact claim <task-id>` before editing."
 		}
 		_ = inbox.Send(p.InboxDir(), from, participant, message)
+	}
+}
+
+func removeCreatedTaskPrompts(p *project.Project, tasks []createdExecutionTask) {
+	for _, task := range tasks {
+		_ = os.Remove(filepath.Join(p.TasksDir(), task.ID+".md"))
 	}
 }
 

@@ -6,7 +6,7 @@ const indexHTML = `<!doctype html>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CoAct Control Center</title>
-  <link rel="stylesheet" href="/world/world.css?v=9" />
+  <link rel="stylesheet" href="/world/world.css?v=10" />
   <style>
     :root {
       color-scheme: dark;
@@ -402,6 +402,15 @@ const indexHTML = `<!doctype html>
       align-items:center;
       flex-wrap:wrap;
     }
+    .task-create { display:grid; grid-template-columns:minmax(220px,.8fr) minmax(320px,1.7fr) auto auto; gap:9px; align-items:start; }
+    .task-create textarea { min-height:76px; resize:vertical; }
+    .task-create input, .task-create select, .task-create button { min-height:44px; }
+    .plan-create { display:grid; grid-template-columns:minmax(280px,2fr) minmax(140px,.6fr) minmax(180px,.8fr) auto; gap:9px; align-items:start; }
+    .plan-create textarea { min-height:92px; }
+    .plan-participants { display:flex; gap:14px; flex-wrap:wrap; color:var(--muted); font-size:13px; }
+    .plan-participants label { display:flex; gap:6px; align-items:center; }
+    .plan-participants input { width:auto; }
+    .plan-status { padding:12px 14px; border:1px solid var(--line); border-radius:var(--radius-sm); background:var(--surface-2); }
     .task-filters { display:flex; gap:6px; flex-wrap:wrap; }
     .task-filter.active {
       color:var(--text);
@@ -1064,6 +1073,8 @@ const indexHTML = `<!doctype html>
       .task-row-tags { justify-content:flex-start; }
       .task-row-actions { padding:0 12px 12px; }
       .row { flex-direction:column; align-items:stretch; }
+      .task-create { grid-template-columns:1fr; }
+      .plan-create { grid-template-columns:1fr; }
       .agent-switcher {
         display:flex;
         flex-direction:row;
@@ -1618,7 +1629,7 @@ const indexHTML = `<!doctype html>
                   <div class="pixel-world-stat"><b id="worldTasks">0</b><span>tasks</span></div>
                   <div class="pixel-world-stat"><b id="worldLocks">0</b><span>locks</span></div>
                 </div>
-                <div class="pixel-world-controls"><button type="button" data-world-theme>Orbit</button><button type="button" data-world-pause>Pause</button><button type="button" data-world-help>?</button></div>
+                <div class="pixel-world-controls"><button type="button" data-world-theme>Orbit</button><button type="button" data-world-quality title="Automatically protects character frame rate">Auto</button><button type="button" data-world-pause>Pause</button><button type="button" data-world-help>?</button></div>
               </div>
             </header>
             <div class="pixel-tooltip" role="tooltip"></div>
@@ -1629,7 +1640,7 @@ const indexHTML = `<!doctype html>
             </aside>
             <aside class="pixel-help">
               <header><h3>Flight manual</h3></header>
-              <div class="pixel-help-grid"><div><kbd>T</kbd> Change environment</div><div><kbd>P</kbd> Pause animation</div><div><kbd>?</kbd> Toggle this help</div><div><kbd>Esc</kbd> Close panels</div><div>Click a crew member for live details.</div><div>Click a service companion to inspect it.</div></div>
+              <div class="pixel-help-grid"><div><kbd>T</kbd> Change environment</div><div><kbd>P</kbd> Pause animation</div><div><kbd>AUTO</kbd> Auto / Max / Lite graphics</div><div><kbd>?</kbd> Toggle this help</div><div><kbd>Esc</kbd> Close panels</div><div>Click crew or companions for live details.</div></div>
               <div style="margin-top:14px"><button type="button" data-world-close-help>Back to station</button></div>
             </aside>
             <footer class="pixel-world-footer">
@@ -1816,9 +1827,21 @@ const indexHTML = `<!doctype html>
                 <div class="row wrap"><span class="badge" id="taskCount">0 open</span><span class="badge">collapse</span></div>
               </summary>
               <div class="stack board-body" id="taskBoard">
-                <div class="row"><input id="taskTitle" placeholder="Add a concrete task for an agent" /><select id="taskOwner"><option value="">Unassigned</option><option value="codex">Codex</option><option value="claude">Claude</option><option value="antigravity">Antigravity</option></select><button onclick="addTask()">Add task</button></div>
+                <div class="task-create"><input id="taskTitle" placeholder="Short Dashboard description" /><textarea id="taskPrompt" placeholder="Full prompt sent to the assigned agent. Defaults to the short description."></textarea><select id="taskOwner"><option value="">Unassigned</option><option value="codex">Codex</option><option value="claude">Claude</option><option value="antigravity">Antigravity</option></select><button onclick="addTask()">Add task</button></div>
                 <div class="task-toolbar"><span class="muted" id="taskSummary">0 todo · 0 assigned · 0 active · 0 done</span><div class="task-filters"><button class="small ghost task-filter active" data-task-filter="open" onclick="setTaskFilter('open')">Open</button><button class="small ghost task-filter" data-task-filter="all" onclick="setTaskFilter('all')">All</button><button class="small ghost task-filter" data-task-filter="done" onclick="setTaskFilter('done')">Done</button></div></div>
                 <div id="tasks" class="task-list"></div>
+              </div>
+            </details>
+
+            <details class="card span-12 board-details" id="planning-card">
+              <summary class="section-head board-summary">
+                <div><div class="eyebrow">Plan together</div><h2>Lead planning</h2></div>
+                <span class="badge">review by default</span>
+              </summary>
+              <div class="stack board-body">
+                <div class="plan-create"><textarea id="planBrief" placeholder="Describe the goal, constraints, and expected result. The lead converts this into reviewed execution tasks."></textarea><select id="planLead"><option value="codex">Codex lead</option><option value="claude">Claude lead</option><option value="antigravity">Antigravity lead</option></select><select id="planApproval"><option value="review">Ask me before distributing</option><option value="auto">Auto-distribute (dangerous)</option></select><button onclick="startPlan()">Start planning</button></div>
+                <div class="plan-participants"><strong>Planning pair</strong><label><input type="checkbox" data-plan-participant="codex" checked /> Codex</label><label><input type="checkbox" data-plan-participant="claude" checked /> Claude</label><label><input type="checkbox" data-plan-participant="antigravity" /> Antigravity</label></div>
+                <div id="planStatus" class="plan-status muted">No planning run yet. Review mode lets the lead draft tasks, but a human must approve before distribution.</div>
               </div>
             </details>
 
@@ -1914,7 +1937,7 @@ const indexHTML = `<!doctype html>
   </div>
   <div class="toast" id="toast"></div>
 
-  <script src="/world/world.js?v=24"></script>
+  <script src="/world/world.js?v=27"></script>
   <script>
     const TOKEN = "__COACT_TOKEN__";
     let lastBrief = null;
@@ -2433,7 +2456,7 @@ const indexHTML = `<!doctype html>
           agents:agents.map(a=>[a.id,a.live,a.status,a.current_task,a.enforcement]),
           locks:locks.map(l=>[l.path,l.owner,l.ttl_seconds,l.reason]),
           log:log.map(item=>[item.ts,item.agent,item.event,item.id,item.path,item.to]),
-          projects:s.projects||[], versions:s.versions||[], manifest:s.manifest||null
+          projects:s.projects||[], versions:s.versions||[], manifest:s.manifest||null, plan:s.plan||null
         });
         if (dashboardSignature === lastDashboardSignature) {
           maybeLoadTerminalMirrors(false).catch(()=>{});
@@ -2463,6 +2486,7 @@ const indexHTML = `<!doctype html>
           lastBrief = s.brief || '';
         }
         renderTasks(tasks);
+        renderPlan(s.plan || null);
         renderAgents(agents);
         renderLocks(locks);
         renderLog(log);
@@ -2648,6 +2672,24 @@ const indexHTML = `<!doctype html>
         if (t.state === 'doing') actions = '<button class="small" onclick="doneTask(\''+esc(t.id)+'\',\''+esc(owner)+'\')">Mark done</button>';
         return '<details class="task-row is-'+esc(t.state)+'"><summary>'+line+'</summary><div class="task-row-actions">'+actions+'</div></details>';
       }).join('') || '<div class="empty">'+(tasks.length ? 'No tasks match this filter.' : 'No tasks yet. Add one above, then assign it to an agent.')+'</div>';
+    }
+    function renderPlan(plan) {
+      const el = document.getElementById('planStatus');
+      if (!el) return;
+      if (!plan) {
+        el.className = 'plan-status muted';
+        el.textContent = 'No planning run yet. Review mode lets the lead draft tasks, but a human must approve before distribution.';
+        return;
+      }
+      const mode = plan.approval_mode === 'auto' ? badge('auto-distribute','warn') : badge('human review','ok');
+      const status = badge(plan.status || 'pending', plan.status === 'approved' || plan.status === 'finalized' ? 'ok' : 'info');
+      let action = '';
+      if (plan.status === 'review' && plan.approval_mode === 'review') action = '<button class="small primary" onclick="approvePlan(\''+esc(plan.id)+'\')">Approve distribution</button>';
+      else if (plan.status === 'approved') action = '<span class="hint">Approved. '+esc(plan.lead)+' will receive instructions to finalize and distribute.</span>';
+      else if (plan.approval_mode === 'review') action = '<span class="hint">Lead drafts the final tasks, then runs <code>coact plan submit '+esc(plan.id)+'</code>.</span>';
+      else action = '<span class="hint">Auto mode skips human approval. Agents still act only on their native CLI turns.</span>';
+      el.className = 'plan-status';
+      el.innerHTML = '<div class="row wrap"><strong>'+esc(plan.id)+'</strong>'+mode+status+badge('lead · '+esc(plan.lead))+'</div><p class="muted" style="margin-top:8px">'+esc(plan.brief || '')+'</p><div class="row wrap" style="margin-top:10px">'+action+'</div>';
     }
     function setTaskFilter(filter) {
       taskFilter = ['open','all','done'].includes(filter) ? filter : 'open';
@@ -2835,7 +2877,9 @@ const indexHTML = `<!doctype html>
     async function initProject(){ mutate('Repository initialized', () => api('/api/init',{method:'POST', body:'{}'})); }
     async function saveBrief(){ mutate('Brief saved', () => api('/api/brief',{method:'POST', body:JSON.stringify({text:document.getElementById('brief').value})})); }
     function selectedTaskOwner(preferred){ return preferred || document.getElementById('taskOwner').value || prompt('Choose an agent', 'codex'); }
-    async function addTask(){ const title=document.getElementById('taskTitle').value; const owner=document.getElementById('taskOwner').value; if(!title.trim()) return; await mutate(owner ? 'Task assigned to '+owner : 'Task added', () => api('/api/tasks',{method:'POST', body:JSON.stringify({title, owner})})); document.getElementById('taskTitle').value=''; }
+    async function addTask(){ const description=document.getElementById('taskTitle').value; const prompt=document.getElementById('taskPrompt').value; const owner=document.getElementById('taskOwner').value; if(!description.trim()) return; await mutate(owner ? 'Task assigned to '+owner : 'Task added', () => api('/api/tasks',{method:'POST', body:JSON.stringify({description, prompt, owner})})); document.getElementById('taskTitle').value=''; document.getElementById('taskPrompt').value=''; }
+    async function startPlan(){ const brief=document.getElementById('planBrief').value.trim(); if(!brief) return; const lead=document.getElementById('planLead').value; const approval_mode=document.getElementById('planApproval').value; if(approval_mode==='auto' && !confirm('Auto-distribute lets the lead create and assign tasks without asking you again. Continue?')) return; const participants=Array.from(document.querySelectorAll('[data-plan-participant]:checked')).map(input=>input.dataset.planParticipant); await mutate('Planning started with '+lead+' as lead', () => api('/api/plans',{method:'POST',body:JSON.stringify({brief,lead,approval_mode,participants})})); document.getElementById('planBrief').value=''; }
+    async function approvePlan(id){ if(!confirm('Approve this plan and allow the lead to distribute its tasks?')) return; mutate('Plan approved', () => api('/api/plans/approve',{method:'POST',body:JSON.stringify({id})})); }
     async function assignTask(id){ const owner=selectedTaskOwner(''); if(!owner) return; mutate('Task assigned to '+owner, () => api('/api/tasks/'+id+'/assign',{method:'POST', body:JSON.stringify({owner})})); }
     async function claimTask(id,preferred){ const owner=selectedTaskOwner(preferred); if(!owner) return; mutate('Task started by '+owner, () => api('/api/tasks/'+id+'/claim',{method:'POST', body:JSON.stringify({owner})})); }
     async function doneTask(id,owner){ if(!owner) return; mutate('Task marked done', () => api('/api/tasks/'+id+'/done',{method:'POST', body:JSON.stringify({owner})})); }

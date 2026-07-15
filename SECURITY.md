@@ -76,6 +76,13 @@ credentials. CoAct stores them only under the gitignored `.coact/terminal/`
 directory. Treat that directory as sensitive local data and delete it before
 sharing a workspace archive.
 
+Full task prompts are also sensitive local data. The board and Dashboard expose
+only the short task description; complete prompts live in owner-only files under
+the gitignored, policy-protected `.coact/tasks/` directory and are copied to an
+assigned agent's protected local inbox. Prompt bodies are size-bounded and never
+included in journal metadata. They are instructions to semi-trusted agents, not
+a sandbox boundary; review untrusted prompt content before assigning it.
+
 ## Usage and collaboration reports
 
 Quota snapshots and peer ratings are local decision-support data under
@@ -128,10 +135,12 @@ repository.
   and is plain text; every significant action is appended to the journal.
 - **Concurrent local reports.** Usage snapshots and peer ratings use local
   meta-locks; shared threshold history is separately serialized.
-- **Planning commit gate.** `coact plan finalize` is restricted to the configured
-  distributor, locks the full planning run while checking required proposals,
-  serializes board mutation, rejects unknown owners and repeated finalization,
-  and journals the resulting task IDs.
+- **Planning commit gate.** Review mode is the default: the configured lead must
+  submit a ready plan and a human must approve before finalization. The explicit
+  `--approval auto` mode removes only that human gate; it does not wake agents or
+  execute arbitrary commands. Finalization still validates lead, readiness,
+  locks and task owners, serializes board mutation, rejects repeated
+  finalization, and journals only task IDs and ownership metadata.
 - **Human-approved UI handoff.** Waiting suggestions never transfer work by
   themselves. The local UI requires an explicit confirmation and valid CSRF
   token, restricts both sides to configured workspace agents, serializes board

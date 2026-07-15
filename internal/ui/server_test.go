@@ -253,7 +253,7 @@ func TestIndexUsesSimplifiedSetupAndWorkPages(t *testing.T) {
 	srv.handleIndex(rec, req)
 	body := rec.Body.Bytes()
 	page := string(body)
-	for _, want := range []string{"data-page-target=\"station\"><span>Station", "data-page-target=\"overview\"><span>Setup", "data-page-target=\"work\"><span>Work", "projectSelect", "taskOwner", "id=\"taskBoard\"", "data-task-filter=\"open\"", "assignTask", "unassignTask", "reopenTask", "class=\"card span-12 board-details\"", "id=\"workTerminals\"", "id=\"terminalCount\"", "work-terminal-tabs", "data-send-inbox-note", "id=\"coactPixelWorld\"", "id=\"coactPixelBackground\"", "id=\"worldAgentAssist\"", "data-world-assist-handoff", "theme-ambient", "ambient-whale", "guard-strip", "id=\"msgText\"", "data-toggle-ambient", "coactAmbientDecorations", "lastDashboardSignature", "terminalDetailsVisible", "refreshInFlight", "/api/handoff", "/world/world.css?v=9", "/world/world.js?v=24"} {
+	for _, want := range []string{"data-page-target=\"station\"><span>Station", "data-page-target=\"overview\"><span>Setup", "data-page-target=\"work\"><span>Work", "projectSelect", "taskOwner", "taskPrompt", "planBrief", "planApproval", "approvePlan", "/api/plans", "id=\"taskBoard\"", "data-task-filter=\"open\"", "assignTask", "unassignTask", "reopenTask", "class=\"card span-12 board-details\"", "id=\"workTerminals\"", "id=\"terminalCount\"", "work-terminal-tabs", "data-send-inbox-note", "id=\"coactPixelWorld\"", "id=\"coactPixelBackground\"", "id=\"worldAgentAssist\"", "data-world-assist-handoff", "data-world-quality", "theme-ambient", "ambient-whale", "guard-strip", "id=\"msgText\"", "data-toggle-ambient", "coactAmbientDecorations", "lastDashboardSignature", "terminalDetailsVisible", "refreshInFlight", "/api/handoff", "/world/world.css?v=10", "/world/world.js?v=27"} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("index missing %q", want)
 		}
@@ -324,6 +324,40 @@ func TestWorldHorizontalWalkKeepsOneFacingFrame(t *testing.T) {
 	}
 }
 
+func TestWorldRendererUsesChromeFriendlyFrameBudget(t *testing.T) {
+	script, err := embeddedWorld.ReadFile("world/world.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(script)
+	for _, want := range []string{
+		"const MOVING_FRAME_INTERVAL = 16",
+		"const IDLE_FRAME_INTERVAL = 50",
+		"const BACKGROUND_FRAME_INTERVAL = 50",
+		"const SLOW_BACKGROUND_FRAME_INTERVAL = 220",
+		"desynchronized:true",
+		"this.scheduleFrame(180)",
+		"this.averageFrameGap>24",
+		"this.qualityPreference==='lite'",
+		"if(this.paused){this.frameCount++",
+	} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("world performance budget missing %q", want)
+		}
+	}
+
+	styles, err := embeddedWorld.ReadFile("world/world.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := string(styles)
+	for _, want := range []string{"aspect-ratio:3/2", "width:min(100%,calc((100vh - 24px)*1.5))"} {
+		if !strings.Contains(css, want) {
+			t.Fatalf("world canvas sizing missing %q", want)
+		}
+	}
+}
+
 func TestEmbeddedAssetsAreAllowlisted(t *testing.T) {
 	srv := &Server{}
 	for _, path := range []string{"/assets/astro-orbit-work.png", "/assets/astro-nova-walk-a.png", "/assets/astro-comet-celebrate.png"} {
@@ -388,13 +422,13 @@ func TestAgentLaunchRejectsUnknownAdapter(t *testing.T) {
 }
 
 func TestTaskAddCanScheduleOwner(t *testing.T) {
-	chdirTemp(t)
+	root := chdirTemp(t)
 	ts := newTestServer(t)
 	defer ts.Close()
 	postJSON(t, ts, "/api/init", nil, http.StatusOK, nil)
 
 	var created taskDTO
-	postJSON(t, ts, "/api/tasks", map[string]string{"title": "Run focused UI tests", "owner": "codex"}, http.StatusOK, &created)
+	postJSON(t, ts, "/api/tasks", map[string]string{"description": "Run focused UI tests", "prompt": "Run only the UI package tests and report failures.", "owner": "codex"}, http.StatusOK, &created)
 	if created.Owner != "codex" || created.State != "claimed" {
 		t.Fatalf("scheduled task = %#v, want owner codex claimed", created)
 	}
@@ -404,6 +438,63 @@ func TestTaskAddCanScheduleOwner(t *testing.T) {
 	}
 	if !hasJournalEvent(state.Log, "task.schedule") {
 		t.Fatalf("journal did not include task.schedule: %#v", state.Log)
+	}
+	prompt, err := os.ReadFile(filepath.Join(root, ".coact", "tasks", created.ID+".md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(prompt), "Run only the UI package tests") {
+		t.Fatalf("full prompt was not persisted: %s", prompt)
+	}
+	inbox, err := os.ReadFile(filepath.Join(root, ".coact", "inbox", "codex.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(inbox), "Full execution prompt") {
+		t.Fatalf("assigned agent did not receive prompt: %s", inbox)
+	}
+}
+
+func TestPlanAPIStartsReviewGatedLeadRun(t *testing.T) {
+	chdirTemp(t)
+	ts := newTestServer(t)
+	defer ts.Close()
+	postJSON(t, ts, "/api/init", nil, http.StatusOK, nil)
+
+	var plan map[string]any
+	postJSON(t, ts, "/api/plans", map[string]any{
+		"brief": "Design and verify the task workflow", "lead": "codex", "approval_mode": "review", "participants": []string{"codex", "claude"},
+	}, http.StatusOK, &plan)
+	if plan["lead"] != "codex" || plan["approval_mode"] != "review" || plan["status"] != "pending" {
+		t.Fatalf("plan = %#v", plan)
+	}
+	state := getState(t, ts)
+	if state.Plan == nil || state.Plan.Lead != "codex" || state.Plan.ApprovalMode != "review" {
+		t.Fatalf("state plan = %#v", state.Plan)
+	}
+}
+
+func TestPlanHandlerStartsReviewRunWithoutShell(t *testing.T) {
+	root := chdirTemp(t)
+	if _, err := setup.Initialize(root, "human"); err != nil {
+		t.Fatal(err)
+	}
+	srv := &Server{token: "test-token", activeRoot: root}
+	body, _ := json.Marshal(map[string]any{
+		"brief": "Plan through the shared service", "lead": "codex", "approval_mode": "review", "participants": []string{"codex", "claude"},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/plans", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.handlePlans(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	state, err := srv.state()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Plan == nil || state.Plan.Lead != "codex" || state.Plan.ApprovalMode != "review" {
+		t.Fatalf("state plan = %#v", state.Plan)
 	}
 }
 

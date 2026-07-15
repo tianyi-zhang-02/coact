@@ -79,6 +79,7 @@ func Default() *Config {
 				".coact/journal/**",
 				".coact/inbox/**",
 				".coact/terminal/**",
+				".coact/tasks/**",
 				".coact/usage/**",
 				".coact/evaluations/**",
 			},

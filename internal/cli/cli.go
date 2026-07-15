@@ -177,13 +177,13 @@ Commands:
   done <id>        Mark a claimed task done
   @agent <text>    Send an inbox message, e.g. coact @claude "please review"
   @all <text>      Broadcast an inbox message to all built-in agents
-  plan "<brief>"   Start planning; use plan ready/status/finalize for completion
+  plan "<brief>"   Start lead planning; review is required unless --approval auto
   msg <to> <text>  Send a message to another agent
   inbox            Read your messages from other agents
   handoff <to>     Hand your tasks + context to another agent
   channel <agent>  Run the Claude Code channel MCP server (real-time push)
   bridge codex     Drive Codex's app-server, relaying live to/from Claude
-  task <action>     Add, assign, unassign, or reopen a task
+  task <action>     Add/show/assign/unassign/reopen tasks with private full prompts
   sidecar          Run the presence heartbeat for this session
   log              Show recent journal events (oversight view)
   policy           Show or check write policy (check <path> | show)
@@ -204,11 +204,13 @@ Examples:
   export COACT_AGENT=claude
   coact sidecar &          # keep this session live
   coact @codex "please review my proposal"
-  coact plan --with codex,claude --distributor codex "Build the auth module"
-  coact plan finalize --agent codex
+	coact plan --with codex,claude --lead codex "Build the auth module"
+	coact plan submit --agent codex
+	coact plan approve
+	coact plan finalize --agent codex
   coact usage set --agent claude --percent 40 --refresh-in 7d
   coact eval rate --peer claude --score 4 --note "clear review"
-  coact task add "Add rate limiting"
+	coact task add --prompt "Implement it with focused tests" "Add rate limiting"
   coact task assign T-001 codex
   coact claim T-001
   coact lock src/api

@@ -9,10 +9,12 @@ import (
 	"time"
 
 	"github.com/tianyi-zhang-02/coact/internal/board"
+	"github.com/tianyi-zhang-02/coact/internal/inbox"
 	"github.com/tianyi-zhang-02/coact/internal/journal"
 	"github.com/tianyi-zhang-02/coact/internal/metalock"
 	"github.com/tianyi-zhang-02/coact/internal/presence"
 	"github.com/tianyi-zhang-02/coact/internal/project"
+	"github.com/tianyi-zhang-02/coact/internal/taskprompt"
 )
 
 // withBoardLock serializes board mutations under a dedicated meta-lock so two
@@ -138,12 +140,14 @@ func cmdDone(args []string) int {
 
 func cmdTask(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: coact task <add|assign|unassign|reopen> ...")
+		fmt.Fprintln(os.Stderr, "usage: coact task <add|show|assign|unassign|reopen> ...")
 		return 2
 	}
 	switch args[0] {
 	case "add":
 		return cmdTaskAdd(args[1:])
+	case "show":
+		return cmdTaskShow(args[1:])
 	case "assign":
 		if len(args) != 3 {
 			fmt.Fprintln(os.Stderr, "usage: coact task assign <task-id> <agent>")
@@ -154,9 +158,16 @@ func cmdTask(args []string) int {
 			fmt.Fprintln(os.Stderr, "coact task assign: agent must contain a-z, 0-9, _ or -")
 			return 2
 		}
-		return mutateTask(args[1], "human", "task.assign", func(b *board.Board) (*board.Task, error) {
+		code := mutateTask(args[1], "human", "task.assign", func(b *board.Board) (*board.Task, error) {
 			return b.Assign(args[1], owner)
 		})
+		if code == 0 {
+			p, _, ok := loadProject()
+			if ok {
+				notifyTaskAssigned(p, owner, args[1], "human")
+			}
+		}
+		return code
 	case "unassign":
 		if len(args) != 2 {
 			fmt.Fprintln(os.Stderr, "usage: coact task unassign <task-id>")
@@ -174,43 +185,147 @@ func cmdTask(args []string) int {
 			return b.Reopen(args[1])
 		})
 	default:
-		fmt.Fprintln(os.Stderr, "usage: coact task <add|assign|unassign|reopen> ...")
+		fmt.Fprintln(os.Stderr, "usage: coact task <add|show|assign|unassign|reopen> ...")
 		return 2
 	}
 }
 
 func cmdTaskAdd(args []string) int {
-	title := strings.TrimSpace(strings.Join(args, " "))
-	if title == "" {
-		fmt.Fprintln(os.Stderr, "usage: coact task add \"<title>\"")
+	fs := flag.NewFlagSet("task add", flag.ContinueOnError)
+	descriptionFlag := fs.String("description", "", "short dashboard description")
+	promptFlag := fs.String("prompt", "", "full execution prompt")
+	promptFileFlag := fs.String("prompt-file", "", "read the full execution prompt from a file")
+	ownerFlag := fs.String("owner", "", "assign the task without starting it")
+	positionals, err := parseInterspersed(fs, args)
+	if err != nil {
 		return 2
 	}
-	if err := board.ValidateTitle(title); err != nil {
+	if *descriptionFlag != "" && len(positionals) > 0 {
+		fmt.Fprintln(os.Stderr, "coact task add: use either --description or a positional description, not both")
+		return 2
+	}
+	description := strings.TrimSpace(*descriptionFlag)
+	if description == "" {
+		description = strings.TrimSpace(strings.Join(positionals, " "))
+	}
+	if description == "" {
+		fmt.Fprintln(os.Stderr, "usage: coact task add [--prompt text|--prompt-file path] [--owner agent] \"<short description>\"")
+		return 2
+	}
+	if err := board.ValidateTitle(description); err != nil {
 		fmt.Fprintf(os.Stderr, "coact task add: %v\n", err)
+		return 2
+	}
+	prompt, err := taskPromptInput(description, *promptFlag, *promptFileFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "coact task add: %v\n", err)
+		return 2
+	}
+	owner := sanitizeAgent(*ownerFlag)
+	if *ownerFlag != "" && owner != strings.ToLower(strings.TrimSpace(*ownerFlag)) {
+		fmt.Fprintln(os.Stderr, "coact task add: owner must contain a-z, 0-9, _ or -")
 		return 2
 	}
 	p, _, ok := loadProject()
 	if !ok {
 		return 1
 	}
-	err := withBoardLock(p, func() error {
+	var created *board.Task
+	err = withBoardLock(p, func() error {
 		b, err := board.Load(p.BoardPath())
 		if err != nil {
 			return err
 		}
-		t := b.Add(title)
-		if err := b.Save(); err != nil {
+		created, err = addTaskWithPrompt(p, b, description, prompt, owner)
+		if err != nil {
 			return err
 		}
-		_ = journal.Append(p.JournalDir(), agentID(""), "task.add", map[string]string{"id": t.ID})
-		fmt.Printf("added %s: %s\n", t.ID, t.Title)
+		if err := b.Save(); err != nil {
+			_ = os.Remove(filepath.Join(p.TasksDir(), created.ID+".md"))
+			return err
+		}
+		event := "task.add"
+		meta := map[string]string{"id": created.ID}
+		if created.Owner != "" {
+			event = "task.schedule"
+			meta["owner"] = created.Owner
+		}
+		_ = journal.Append(p.JournalDir(), agentID(""), event, meta)
+		fmt.Printf("added %s: %s\n", created.ID, created.Title)
+		fmt.Printf("prompt: .coact/tasks/%s.md\n", created.ID)
 		return nil
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "coact: %v\n", err)
 		return 1
 	}
+	if created.Owner != "" {
+		notifyTaskAssigned(p, created.Owner, created.ID, "human")
+	}
 	return 0
+}
+
+func cmdTaskShow(args []string) int {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: coact task show <task-id>")
+		return 2
+	}
+	p, _, ok := loadProject()
+	if !ok {
+		return 1
+	}
+	detail, err := taskprompt.Read(p.TasksDir(), strings.ToUpper(strings.TrimSpace(args[0])))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "coact task show: %v\n", err)
+		return 1
+	}
+	fmt.Printf("%s  %s\n\n%s\n", detail.ID, detail.Description, detail.Prompt)
+	return 0
+}
+
+func taskPromptInput(description, prompt, promptFile string) (string, error) {
+	if strings.TrimSpace(prompt) != "" && strings.TrimSpace(promptFile) != "" {
+		return "", fmt.Errorf("use either --prompt or --prompt-file, not both")
+	}
+	if strings.TrimSpace(promptFile) != "" {
+		data, err := os.ReadFile(promptFile)
+		if err != nil {
+			return "", err
+		}
+		prompt = string(data)
+	}
+	if strings.TrimSpace(prompt) == "" {
+		prompt = description
+	}
+	prompt = strings.TrimSpace(prompt)
+	if err := taskprompt.ValidatePrompt(prompt); err != nil {
+		return "", err
+	}
+	return prompt, nil
+}
+
+func addTaskWithPrompt(p *project.Project, b *board.Board, description, prompt, owner string) (*board.Task, error) {
+	task := b.Add(description)
+	if owner != "" {
+		assigned, err := b.Assign(task.ID, owner)
+		if err != nil {
+			return nil, err
+		}
+		task = assigned
+	}
+	if err := taskprompt.Write(p.TasksDir(), taskprompt.Detail{ID: task.ID, Description: description, Prompt: prompt}); err != nil {
+		return nil, err
+	}
+	return task, nil
+}
+
+func notifyTaskAssigned(p *project.Project, owner, id, from string) {
+	detail, err := taskprompt.Read(p.TasksDir(), id)
+	if err != nil {
+		return
+	}
+	message := fmt.Sprintf("Assigned task %s: %s\n\nFull execution prompt:\n%s\n\nClaim it with `coact claim %s` before editing.", detail.ID, detail.Description, detail.Prompt, detail.ID)
+	_ = inbox.Send(p.InboxDir(), from, owner, message)
 }
 
 func mutateTask(id, actor, event string, mutate func(*board.Board) (*board.Task, error)) int {

@@ -19,6 +19,11 @@
   <p><strong>English</strong> · <a href="README.zh-CN.md">简体中文</a> · <a href="docs/FEATURES.md">Feature status</a> · <a href="SECURITY.md">Security</a></p>
 </div>
 
+<p align="center">
+  <img src="assets/demo/coact-demo.gif" alt="CoAct demo showing two live coding agents coordinating tasks, file locks, lead planning, and completion feedback" width="960">
+</p>
+<p align="center"><em>Two native agent terminals. One shared plan, task board, safety layer, and audit trail.</em></p>
+
 CoAct is a local coordination and safety layer for coding agents. It keeps each
 agent in its familiar CLI while adding shared memory, structured planning, task
 ownership, direct messages, write-intent locks, usage alerts, collaboration
@@ -28,7 +33,6 @@ reports, and an auditable journal.
 > autonomous coding agent.** Install and authenticate each agent CLI separately.
 
 ## Why CoAct?
-
 | Without CoAct | With CoAct |
 |---|---|
 | Copy context between terminals | Shared project memory and inboxes |
@@ -117,28 +121,36 @@ Do not put secrets in either file.
 ### 2. Plan together
 
 ```sh
-coact plan --with codex,claude --distributor codex "Refactor authentication safely"
+coact plan --with codex,claude --lead codex "Refactor authentication safely"
 coact plan status
 ```
 
 Each agent receives a local inbox message and writes an independent proposal
 under `.coact/runs/<run>/`. The distributor waits until proposals say
-`Status: ready` and are unlocked. The distributor writes structured tasks in
-`final-plan.md`, then atomically creates and assigns the board work:
+`Status: ready` and are unlocked. The lead writes structured tasks in
+`final-plan.md`. Each task has a short Dashboard description plus the complete
+prompt sent to its owner:
 
 ```md
 ## Execution tasks
 
 - [codex] Implement the authentication change
+  Prompt: Apply the approved design, add focused tests, and report validation.
 - [claude] Review safety and documentation
+  Prompt: Review the implementation for security regressions and update both READMEs.
 - [unassigned] Run the final smoke test
 ```
 
 ```sh
+coact plan submit --agent codex <run-id>
+coact plan approve <run-id>                 # human safety gate
 coact plan finalize --agent codex <run-id>
 ```
 
-Only the configured distributor can finalize. CoAct locks the planning run,
+Human review is the default. `coact plan finalize` is blocked until the lead
+submits and a human approves. `--approval auto` is an explicit dangerous mode
+that lets the lead distribute without this approval; it does not wake agents or
+replace their native CLI turns. Only the configured lead can finalize. CoAct locks the planning run,
 rechecks every required proposal, serializes the board update, records task IDs
 in `final-plan.md`, journals the decision, and notifies each participant. An
 assigned task starts as `claimed`; its owner still runs `coact claim <id>` when
@@ -156,6 +168,8 @@ coact plan ready <run-id>
 
 ```sh
 coact board
+coact task add --prompt "Implement with focused tests" "Add rate limiting"
+coact task show T-001            # explicit access to the full local prompt
 coact task assign T-001 codex  # reserve without reporting work as started
 coact claim T-001
 coact lock internal/auth
@@ -262,8 +276,8 @@ Read [SECURITY.md](SECURITY.md) before relying on CoAct for high-assurance work.
 |---|---|
 | Set up or verify | `coact init`, `coact doctor`, `coact deinit` |
 | Launch agents | `coact claude`, `coact codex`, `coact antigravity` |
-| Plan | `coact plan`, `coact plan ready`, `coact plan status`, `coact plan finalize` |
-| Own work | `coact board`, `task add/assign/unassign/reopen`, `claim`, `done` |
+| Plan | `coact plan`, `coact plan ready`, `coact plan submit/approve/status/finalize` |
+| Own work | `coact board`, `task add/show/assign/unassign/reopen`, `claim`, `done` |
 | Coordinate | `coact @agent`, `@all`, `inbox`, `handoff` |
 | Prevent overlap | `coact lock`, `unlock`, `policy`, `worktree`, `merge` |
 | Observe | `coact`, `status`, `log` |

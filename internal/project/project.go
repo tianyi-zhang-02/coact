@@ -27,6 +27,7 @@ func (p *Project) JournalDir() string    { return filepath.Join(p.CoactDir(), "j
 func (p *Project) AdaptersDir() string   { return filepath.Join(p.CoactDir(), "adapters") }
 func (p *Project) MemoryDir() string     { return filepath.Join(p.CoactDir(), "memory") }
 func (p *Project) RunsDir() string       { return filepath.Join(p.CoactDir(), "runs") }
+func (p *Project) TasksDir() string      { return filepath.Join(p.CoactDir(), "tasks") }
 func (p *Project) UsageDir() string      { return filepath.Join(p.CoactDir(), "usage") }
 func (p *Project) EvaluationDir() string { return filepath.Join(p.CoactDir(), "evaluations") }
 func (p *Project) ConfigPath() string    { return filepath.Join(p.CoactDir(), "config.json") }

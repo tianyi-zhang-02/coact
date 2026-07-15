@@ -13,6 +13,7 @@ import (
 	"github.com/tianyi-zhang-02/coact/internal/presence"
 	"github.com/tianyi-zhang-02/coact/internal/project"
 	"github.com/tianyi-zhang-02/coact/internal/setup"
+	"github.com/tianyi-zhang-02/coact/internal/taskprompt"
 )
 
 func chdirInitializedProject(t *testing.T) string {
@@ -189,7 +190,7 @@ func TestPlanReadyMarksOwnProposalAndNotifiesDistributor(t *testing.T) {
 
 func TestPlanFinalizeCreatesAssignedTasksAndIsIdempotent(t *testing.T) {
 	dir := chdirInitializedProject(t)
-	if code := Run([]string{"plan", "--id", "r-003", "--with", "codex,claude", "--distributor", "claude", "Ship safely"}); code != 0 {
+	if code := Run([]string{"plan", "--id", "r-003", "--with", "codex,claude", "--distributor", "claude", "--approval", "auto", "Ship safely"}); code != 0 {
 		t.Fatalf("Run(plan) = %d", code)
 	}
 	for _, agent := range []string{"codex", "claude"} {
@@ -289,7 +290,7 @@ Proceed with two independently owned tasks.
 
 func TestPlanFinalizeRequiresDistributorAndReadyUnlockedProposals(t *testing.T) {
 	dir := chdirInitializedProject(t)
-	if code := Run([]string{"plan", "--id", "r-004", "--with", "codex,claude", "--distributor", "claude", "Coordinate safely"}); code != 0 {
+	if code := Run([]string{"plan", "--id", "r-004", "--with", "codex,claude", "--distributor", "claude", "--approval", "auto", "Coordinate safely"}); code != 0 {
 		t.Fatalf("Run(plan) = %d", code)
 	}
 	finalPath := filepath.Join(dir, ".coact", "runs", "r-004", "final-plan.md")
@@ -341,7 +342,7 @@ Distributor: claude
 
 func TestPlanFinalizeRejectsUnknownTaskOwner(t *testing.T) {
 	dir := chdirInitializedProject(t)
-	if code := Run([]string{"plan", "--id", "r-005", "--with", "codex,claude", "--distributor", "human", "Keep ownership explicit"}); code != 0 {
+	if code := Run([]string{"plan", "--id", "r-005", "--with", "codex,claude", "--distributor", "claude", "--approval", "auto", "Keep ownership explicit"}); code != 0 {
 		t.Fatalf("Run(plan) = %d", code)
 	}
 	for _, agent := range []string{"codex", "claude"} {
@@ -354,7 +355,7 @@ func TestPlanFinalizeRejectsUnknownTaskOwner(t *testing.T) {
 	if err := os.WriteFile(finalPath, []byte(final), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code := Run([]string{"plan", "finalize", "--agent", "human", "r-005"}); code == 0 {
+	if code := Run([]string{"plan", "finalize", "--agent", "claude", "r-005"}); code == 0 {
 		t.Fatal("owner outside planning participants should be rejected")
 	}
 	sharedBoard, err := board.Load(filepath.Join(dir, ".coact", "board.md"))
@@ -363,5 +364,82 @@ func TestPlanFinalizeRejectsUnknownTaskOwner(t *testing.T) {
 	}
 	if got := len(sharedBoard.Tasks()); got != 1 {
 		t.Fatalf("rejected finalize mutated board: %d tasks", got)
+	}
+}
+
+func TestPlanReviewGateAndFullTaskPrompt(t *testing.T) {
+	dir := chdirInitializedProject(t)
+	if code := Run([]string{"plan", "--id", "r-006", "--with", "codex,claude", "--lead", "claude", "Ship with review"}); code != 0 {
+		t.Fatalf("Run(plan) = %d", code)
+	}
+	for _, agent := range []string{"codex", "claude"} {
+		if code := Run([]string{"plan", "ready", "--agent", agent, "r-006"}); code != 0 {
+			t.Fatalf("Run(plan ready %s) = %d", agent, code)
+		}
+	}
+	finalPath := filepath.Join(dir, ".coact", "runs", "r-006", "final-plan.md")
+	final := `# Final plan
+
+Status: pending
+Distributor: claude
+
+## Execution tasks
+
+- [codex] Add reviewed task workflow
+  Prompt: Implement the approved workflow, add focused tests, and preserve compatibility.
+`
+	if err := os.WriteFile(finalPath, []byte(final), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := Run([]string{"plan", "finalize", "--agent", "claude", "r-006"}); code == 0 {
+		t.Fatal("review-gated plan should reject direct finalize")
+	}
+	if code := Run([]string{"plan", "submit", "--agent", "claude", "r-006"}); code != 0 {
+		t.Fatalf("Run(plan submit) = %d", code)
+	}
+	if got := documentStatus(finalPath); got != "review" {
+		t.Fatalf("status after submit = %q, want review", got)
+	}
+	if code := Run([]string{"plan", "approve", "--agent", "human", "r-006"}); code != 0 {
+		t.Fatalf("Run(plan approve) = %d", code)
+	}
+	if code := Run([]string{"plan", "finalize", "--agent", "claude", "r-006"}); code != 0 {
+		t.Fatalf("Run(plan finalize) = %d", code)
+	}
+	detail, err := taskprompt.Read(filepath.Join(dir, ".coact", "tasks"), "T-002")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Description != "Add reviewed task workflow" || !strings.Contains(detail.Prompt, "focused tests") {
+		t.Fatalf("task detail = %#v", detail)
+	}
+}
+
+func TestTaskAddSeparatesDescriptionFromPrompt(t *testing.T) {
+	dir := chdirInitializedProject(t)
+	if code := Run([]string{"task", "add", "--owner", "codex", "--prompt", "Implement the endpoint and run the focused tests.", "Add endpoint"}); code != 0 {
+		t.Fatalf("Run(task add) = %d", code)
+	}
+	sharedBoard, err := board.Load(filepath.Join(dir, ".coact", "board.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tasks := sharedBoard.Tasks()
+	if len(tasks) != 2 || tasks[0].Title != "Add endpoint" || tasks[0].Owner != "codex" {
+		t.Fatalf("tasks = %#v", tasks)
+	}
+	detail, err := taskprompt.Read(filepath.Join(dir, ".coact", "tasks"), tasks[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if detail.Description != "Add endpoint" || !strings.Contains(detail.Prompt, "focused tests") {
+		t.Fatalf("detail = %#v", detail)
+	}
+	inboxData, err := os.ReadFile(filepath.Join(dir, ".coact", "inbox", "codex.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(inboxData), detail.Prompt) {
+		t.Fatalf("assigned prompt missing from inbox: %s", inboxData)
 	}
 }

@@ -3,6 +3,12 @@
 
   const WIDTH = 768;
   const HEIGHT = 512;
+  const MOVING_FRAME_INTERVAL = 16;
+  const IDLE_FRAME_INTERVAL = 50;
+  const REDUCED_MOTION_FRAME_INTERVAL = 100;
+  const BACKGROUND_FRAME_INTERVAL = 50;
+  const SLOW_BACKGROUND_FRAME_INTERVAL = 220;
+  const REDUCED_MOTION_BACKGROUND_INTERVAL = 180;
   const AIRLOCK = {x:384,y:154};
   const TABLE_SEATS = [{x:290,y:250},{x:384,y:184},{x:478,y:250},{x:384,y:330}];
   const AGENT_SLOTS = [
@@ -71,12 +77,12 @@
     constructor(root) {
       this.root = root;
       this.canvas = root.querySelector('#coactPixelWorld');
-      this.ctx = this.canvas.getContext('2d');
+      this.ctx = this.canvas.getContext('2d',{alpha:true,desynchronized:true});
       this.ctx.imageSmoothingEnabled = false;
       this.backgroundCanvas = root.querySelector('#coactPixelBackground')||document.createElement('canvas');
       this.backgroundCanvas.width = WIDTH;
       this.backgroundCanvas.height = HEIGHT;
-      this.backgroundCtx = this.backgroundCanvas.getContext('2d');
+      this.backgroundCtx = this.backgroundCanvas.getContext('2d',{alpha:false,desynchronized:true});
       this.backgroundCtx.imageSmoothingEnabled = false;
       this.backgroundReady = false;
       this.lastBackgroundDrawTime = -Infinity;
@@ -88,6 +94,7 @@
       if (!Number.isFinite(this.modeIndex)) this.modeIndex = 0;
       this.modeIndex = ((this.modeIndex % MODES.length) + MODES.length) % MODES.length;
       this.reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      this.qualityPreference = ['auto','smooth','lite'].includes(localStorage.getItem('coactWorldQuality'))?localStorage.getItem('coactWorldQuality'):'auto';
       this.paused = false;
       this.selected = '';
       this.hover = null;
@@ -99,6 +106,11 @@
       this.frameCount = 0;
       this.lastWatchdogFrame = 0;
       this.lastDrawTime = 0;
+      this.averageDrawCost = 0;
+      this.averageFrameGap = 16.7;
+      this.slowDrawCount = 0;
+      this.performancePressure = 0;
+      this.lowPowerBackground = this.qualityPreference==='lite';
       this.assetsReady = false;
       this.assetsError = '';
       this.hasSyncedState = false;
@@ -114,7 +126,7 @@
       this.bind();
       this.syncControls();
       this.loadAssets();
-      requestAnimationFrame(time=>this.frame(time));
+      this.scheduleFrame();
       this.watchdog = window.setInterval(()=>{
         if (document.hidden || this.paused) return;
         if (this.frameCount===this.lastWatchdogFrame) {
@@ -123,6 +135,11 @@
         }
         this.lastWatchdogFrame=this.frameCount;
       },500);
+    }
+
+    scheduleFrame(delay=0) {
+      if(delay>0)window.setTimeout(()=>requestAnimationFrame(time=>this.frame(time)),delay);
+      else requestAnimationFrame(time=>this.frame(time));
     }
 
     async loadAssets() {
@@ -147,7 +164,10 @@
       this.canvas.addEventListener('pointerleave',()=>{this.hover=null;this.hideTooltip();});
       this.canvas.addEventListener('click',event=>this.onClick(event));
       this.root.querySelector('[data-world-pause]')?.addEventListener('click',()=>{
-        this.paused=!this.paused;this.syncControls();
+        this.paused=!this.paused;this.syncControls();this.safeDraw();
+      });
+      this.root.querySelector('[data-world-quality]')?.addEventListener('click',()=>{
+        const modes=['auto','smooth','lite'];this.qualityPreference=modes[(modes.indexOf(this.qualityPreference)+1)%modes.length];localStorage.setItem('coactWorldQuality',this.qualityPreference);this.performancePressure=0;this.setLowPowerBackground(this.qualityPreference==='lite');this.syncControls();this.backgroundReady=false;this.safeDraw();
       });
       this.root.querySelector('[data-world-theme]')?.addEventListener('click',()=>{
         this.previousModeIndex=this.modeIndex;this.modeIndex=(this.modeIndex+1)%MODES.length;this.sceneChangedAt=this.worldTime;this.backgroundReady=false;localStorage.setItem('coactWorldTheme',String(this.modeIndex));this.syncControls();if(this.selected)this.renderSelected();this.safeDraw();
@@ -170,6 +190,8 @@
       this.root.classList.toggle('is-paused',this.paused);
       const pause=this.root.querySelector('[data-world-pause]');
       if (pause) {pause.textContent=this.paused?'Resume':'Pause';pause.setAttribute('aria-pressed',String(!this.paused));}
+      const quality=this.root.querySelector('[data-world-quality]');
+      if(quality){const adaptive=this.qualityPreference==='auto'&&this.lowPowerBackground;quality.textContent=this.qualityPreference==='smooth'?'MAX':this.qualityPreference==='lite'?'LITE':adaptive?'AUTO·LITE':'AUTO';quality.title=this.qualityPreference==='auto'?'Automatically protects character frame rate':this.qualityPreference==='smooth'?'Maximum background detail':'Reduced background detail';}
       const mode=this.root.querySelector('[data-world-theme]');
       if (mode) mode.textContent=MODES[this.modeIndex];
       const titles=['CoAct Orbital Crew','CoAct Shallow Sea Lab','CoAct Waterfall Habitat','CoAct Wasteland Outpost'];
@@ -216,6 +238,7 @@
       this.updateAssistSuggestion();
       this.updateServices();
       if (this.selected) this.renderSelected();
+      if (this.paused) this.safeDraw();
     }
 
     text(id,value) {const element=this.root.querySelector('#'+id);if(element)element.textContent=String(value);}
@@ -396,15 +419,17 @@
     }
 
     frame(time) {
-      const delta=Math.min(50,time-this.lastTime);this.lastTime=time;
+      const rawDelta=time-this.lastTime,delta=Math.min(50,rawDelta);this.lastTime=time;
       const page=this.root.closest('.page-view');
-      if(page&&!page.classList.contains('active')){this.frameCount++;requestAnimationFrame(next=>this.frame(next));return;}
+      if(document.hidden||(page&&!page.classList.contains('active'))){this.frameCount++;this.scheduleFrame(180);return;}
+      if(this.paused){this.frameCount++;this.scheduleFrame(180);return;}
+      if(rawDelta>0&&rawDelta<120){this.averageFrameGap=this.averageFrameGap*.94+rawDelta*.06;this.updatePerformancePressure();}
       if(!this.paused){const motionDelta=this.reducedMotion?delta*.7:delta;this.worldTime+=motionDelta;this.step(motionDelta);}
       this.frameCount++;
-      const crewMoving=[...this.crew.values()].some(actor=>actor.live&&actor.path.length);
-      const frameInterval=this.reducedMotion?64:crewMoving?15:32;
+      const entitiesMoving=[...this.crew.values()].some(actor=>actor.live&&actor.path.length)||this.services.some(bot=>bot.path.length);
+      const frameInterval=this.reducedMotion?REDUCED_MOTION_FRAME_INTERVAL:entitiesMoving?MOVING_FRAME_INTERVAL:IDLE_FRAME_INTERVAL;
       if(time-this.lastDrawTime>=frameInterval){this.lastDrawTime=time;this.safeDraw();}
-      requestAnimationFrame(next=>this.frame(next));
+      this.scheduleFrame();
     }
 
     step(delta) {
@@ -446,15 +471,36 @@
     }
 
     safeDraw() {
+      const started=performance.now();
       try {this.draw();}
       catch(error){const message=error instanceof Error?error.message:String(error);this.drawFailure(message);console.error('CoAct orbital renderer failed',error);}
+      finally {
+        const cost=performance.now()-started;
+        this.averageDrawCost=this.averageDrawCost*.88+cost*.12;
+        if(this.averageDrawCost>11)this.slowDrawCount=Math.min(30,this.slowDrawCount+1);
+        else if(this.averageDrawCost<7)this.slowDrawCount=Math.max(0,this.slowDrawCount-1);
+        this.updatePerformancePressure();
+      }
+    }
+
+    updatePerformancePressure() {
+      if(this.qualityPreference==='smooth'){this.performancePressure=0;this.setLowPowerBackground(false);return;}
+      if(this.qualityPreference==='lite'){this.performancePressure=30;this.setLowPowerBackground(true);return;}
+      const slow=this.averageFrameGap>24||this.averageDrawCost>11||this.slowDrawCount>=8;
+      this.performancePressure=clamp(this.performancePressure+(slow?1:-.05),0,30);
+      if(!this.lowPowerBackground&&this.performancePressure>=12)this.setLowPowerBackground(true);
+      else if(this.lowPowerBackground&&this.performancePressure<=3)this.setLowPowerBackground(false);
+    }
+
+    setLowPowerBackground(enabled) {
+      enabled=!!enabled;if(this.lowPowerBackground===enabled)return;this.lowPowerBackground=enabled;this.backgroundReady=false;this.syncControls();
     }
 
     draw() {
       const ctx=this.ctx;ctx.clearRect(0,0,WIDTH,HEIGHT);
       if(!this.assetsReady){this.drawLoading();return;}
       ctx.imageSmoothingEnabled=false;
-      const transition=clamp((this.worldTime-this.sceneChangedAt)/650,0,1),backgroundInterval=this.reducedMotion?120:50;
+      const transition=clamp((this.worldTime-this.sceneChangedAt)/650,0,1),backgroundInterval=this.reducedMotion?REDUCED_MOTION_BACKGROUND_INTERVAL:(this.lowPowerBackground?SLOW_BACKGROUND_FRAME_INTERVAL:BACKGROUND_FRAME_INTERVAL);
       if(!this.backgroundReady||this.worldTime-this.lastBackgroundDrawTime>=backgroundInterval)this.renderBackground(transition);
       const entities=[...this.services.map(bot=>({kind:'service',value:bot,y:bot.py})),...[...this.crew.values()].filter(actor=>actor.mode!=='hidden').map(actor=>({kind:'crew',value:actor,y:actor.py}))].sort((a,b)=>a.y-b.y);
       entities.forEach(entity=>entity.kind==='crew'?this.drawCrew(entity.value):this.drawService(entity.value));
@@ -468,9 +514,9 @@
         const ctx=this.ctx;ctx.clearRect(0,0,WIDTH,HEIGHT);ctx.imageSmoothingEnabled=false;
       ctx.drawImage(this.stations[this.modeIndex],0,0,WIDTH,HEIGHT);
       if(transition<1&&this.previousModeIndex!==this.modeIndex){ctx.save();ctx.globalAlpha=1-transition;ctx.drawImage(this.stations[this.previousModeIndex],0,0,WIDTH,HEIGHT);ctx.restore();}
-      this.drawWindowMotion();
+      if(!this.lowPowerBackground)this.drawWindowMotion();
       this.drawInteriorAnimation();
-      this.drawBackgroundNPCs();
+      if(!this.lowPowerBackground)this.drawBackgroundNPCs();
         this.backgroundReady=true;this.lastBackgroundDrawTime=this.worldTime;
       } finally {this.ctx=outputCtx;}
     }
@@ -704,10 +750,10 @@
       for(const bot of this.services)if(Math.abs(point.x-bot.px)<18&&Math.abs(point.y-bot.py)<24){const presentation=this.servicePresentation(bot);return{type:'service',bot,label:presentation.name+' · '+presentation.role};}
       return null;
     }
-    onPointer(event) {const point=this.canvasPoint(event),hit=this.hit(point);this.hover=hit;this.canvas.style.cursor=hit?'pointer':'crosshair';if(!hit){this.hideTooltip();return;}const tooltip=this.root.querySelector('.pixel-tooltip');if(!tooltip)return;tooltip.textContent=hit.label;tooltip.style.left=clamp(point.cx+16,8,this.root.clientWidth-260)+'px';tooltip.style.top=clamp(point.cy+16,8,this.root.clientHeight-50)+'px';tooltip.classList.add('show');}
+    onPointer(event) {const point=this.canvasPoint(event),hit=this.hit(point);this.hover=hit;this.canvas.style.cursor=hit?'pointer':'crosshair';if(!hit){this.hideTooltip();if(this.paused)this.safeDraw();return;}const tooltip=this.root.querySelector('.pixel-tooltip');if(!tooltip)return;tooltip.textContent=hit.label;tooltip.style.left=clamp(point.cx+16,8,this.root.clientWidth-260)+'px';tooltip.style.top=clamp(point.cy+16,8,this.root.clientHeight-50)+'px';tooltip.classList.add('show');if(this.paused)this.safeDraw();}
     hideTooltip(){this.root.querySelector('.pixel-tooltip')?.classList.remove('show');}
     onClick(event){const hit=this.hit(this.canvasPoint(event));if(hit?.type==='crew')this.select(hit.actor.id);else if(hit?.type==='service')this.select('service:'+hit.bot.id);else this.select('');}
-    select(id){this.selected=id;this.root.querySelector('.pixel-agent-panel')?.classList.toggle('show',!!id);if(id)this.renderSelected();}
+    select(id){this.selected=id;this.root.querySelector('.pixel-agent-panel')?.classList.toggle('show',!!id);if(id)this.renderSelected();if(this.paused)this.safeDraw();}
     renderSelected(){
       const assist=this.root.querySelector('#worldAgentAssist');
       assist?.classList.remove('show');
