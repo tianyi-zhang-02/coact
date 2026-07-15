@@ -4,7 +4,7 @@
 
 <img src="assets/mascot/icon.png" alt="CoAct 机器人宇航员 CoBot" width="140">
 
-**让 Claude Code、Codex 和 Gemini 在同一个仓库协作，同时保留各自原生 terminal。**
+**让 Claude Code、Codex 和 Antigravity 在同一个仓库协作，同时保留各自原生 terminal。**
 
 CoAct 是本地的多 agent 协作与安全层：共享项目记忆、共同规划、任务归属、`@agent`
 消息、写入意图锁、用量提醒、合作报告和审计记录。它不会替代 agent CLI，也不是模型
@@ -31,8 +31,10 @@ coact claude
 coact codex
 
 # 可选 terminal 3
-coact gemini
+coact antigravity
 ```
+
+Antigravity 使用原生 `agy` CLI，是 CoAct 内置的第三个 agent。
 
 不需要额外开启第三个“管理 terminal”。你可以在任意 agent 对话里让它执行 CoAct
 命令，也可以在普通 shell 里执行：
@@ -48,6 +50,18 @@ launcher 会设置 `COACT_AGENT`、`COACT_BIN` 和 `PATH`。即使你用
 `/some/path/coact codex` 启动，agent 仍然可以直接运行 `coact inbox`。
 
 `v1.0.0` 是第一个稳定的 terminal-native coordination release。
+
+### 可选轨道站界面
+
+运行 `coact ui` 可以打开本地可视化状态页。Station 会把真实 agent heartbeat、任务
+归属、planning/review 事件、locks、messages、memory sync 和审计活动映射到原创动态
+像素飞船。Crew 会沿带碰撞检测的导航网格移动，工位可以扩展；本地功能机器人负责
+呈现不同的协调职责。Agent 仍在各自原生 terminal 中工作；Station 不读取 terminal
+输入，也不会替代或模拟 terminal。UI 只绑定 loopback、尊重 reduced-motion 设置，
+所有写操作继续使用现有的 per-run CSRF 安全门。任务完成后会触发短暂、随地图变化的
+庆祝效果；当一个 live agent 等待较久时，Station 会建议空闲队友提供帮助。Human
+可以先发送 help offer，也可以明确确认 handoff：重新分配 active tasks、释放原 owner
+locks、通知接手者并记录 journal。等待判断只是 heuristic，handoff 永远不会自动执行。
 
 ## 日常工作流
 
@@ -68,9 +82,28 @@ coact plan status
 ```
 
 每个 agent 会收到本地 inbox 消息，并在 `.coact/runs/<run>/` 下独立写 proposal。
-distributor 等所有 proposal 都变成 `Status: ready` 且已解锁，再写 `final-plan.md`
-并创建 board tasks。默认消息是 turn-based：空闲 agent 会在下一次 turn 读取；实验性的
-real-time bridge 可以提供 mid-turn push。
+distributor 等所有 proposal 都变成 `Status: ready` 且已解锁，再在 `final-plan.md`
+写结构化任务：
+
+```md
+## Execution tasks
+
+- [codex] 实现 authentication 改动
+- [claude] 检查安全性和文档
+- [unassigned] 执行最终 smoke test
+```
+
+然后运行：
+
+```sh
+coact plan finalize --agent codex <run-id>
+```
+
+只有设定好的 distributor 可以 finalize。CoAct 会锁住整个 planning run，重新确认
+每个必需 proposal 都 ready 且未被锁定，串行更新 board，把 task ID 写回
+`final-plan.md`，记录 journal，并通知所有参与者。已分配任务先进入 `claimed`，owner
+真正开工时仍需运行 `coact claim <id>`。默认消息是 turn-based：空闲 agent 会在下一次
+turn 读取；实验性的 real-time bridge 可以提供 mid-turn push。
 
 proposal 写完后，agent 不需要手动改 metadata：
 
@@ -82,6 +115,7 @@ coact plan ready <run-id>
 
 ```sh
 coact board
+coact task assign T-001 codex  # 先预留，不会显示为已经开工
 coact claim T-001
 coact lock internal/auth
 # 修改和测试
@@ -89,7 +123,11 @@ coact unlock internal/auth
 coact done T-001
 ```
 
-board claim 会串行化。Claude Code 遇到冲突路径时会被 hook 硬拦截；Codex 和 Gemini
+任务状态严格按 `todo → claimed → doing → done` 流转。任务必须先由 owner claim 并开工，
+之后才能标记完成；开工前可运行 `coact task unassign T-001`，完成后需要返工可运行
+`coact task reopen T-001`。本地 UI 使用完全相同的状态机，并提供 Open、All、Done 三种视图。
+
+board 变更会串行化。Claude Code 遇到冲突路径时会被 hook 硬拦截；Codex 和 Antigravity
 通过注入的 contract 自律，因此共享目录里的保护属于 advisory。需要更强物理隔离时，
 使用 `coact <agent> --worktree`。
 
@@ -143,8 +181,8 @@ echo '这个 feature 的 goal 是共享 memory，同时运行 `coact inbox`。' 
 echo '这是一个测试。' | coact zh check --off
 ```
 
-当前版本提供 detection/protection 诊断和 Go adapter，但不会自动接管 Claude、Codex
-或 Gemini 的输出，也不会自行调用润色模型。
+当前版本提供 detection/protection 诊断和 Go adapter，但不会自动接管 provider
+输出，也不会自行调用润色模型。
 
 ## 哪些功能可以直接用？
 
@@ -173,9 +211,9 @@ echo '这是一个测试。' | coact zh check --off
 | 需求 | 命令 |
 |---|---|
 | 初始化/检查 | `coact init`, `coact doctor`, `coact deinit` |
-| 启动 agent | `coact claude`, `coact codex`, `coact gemini` |
-| 一起规划 | `coact plan`, `coact plan ready`, `coact plan status` |
-| 管理任务 | `coact board`, `task add`, `claim`, `done` |
+| 启动 agent | `coact claude`, `coact codex`, `coact antigravity` |
+| 一起规划 | `coact plan`, `coact plan ready`, `coact plan status`, `coact plan finalize` |
+| 管理任务 | `coact board`, `task add/assign/unassign/reopen`, `claim`, `done` |
 | 协作沟通 | `coact @agent`, `@all`, `inbox`, `handoff` |
 | 防止覆盖 | `coact lock`, `unlock`, `policy`, `worktree`, `merge` |
 | 查看状态 | `coact`, `status`, `log` |

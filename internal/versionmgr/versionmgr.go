@@ -73,25 +73,28 @@ type UpdateOptions struct {
 }
 
 const bundledManifestJSON = `{
-  "version": "dev",
-  "channel": "beta",
-  "stability": "experimental",
-  "recommended": false,
-  "summary": "Terminal-native multi-agent coordination with shared planning, safe task ownership, usage alerts, collaboration reports, and auditability.",
+  "version": "v1.0.0",
+  "channel": "stable",
+  "stability": "stable",
+  "recommended": true,
+  "summary": "Terminal-native multi-agent coordination with shared planning, strict task ownership, local auditability, and an optional visual control center.",
   "supports": {
     "cli": true,
     "ui": true,
     "realtime": "experimental",
     "autopilot": "not included",
-    "agents": ["claude", "codex", "gemini"],
+    "agents": ["claude", "codex", "antigravity"],
     "platforms": ["darwin/amd64", "darwin/arm64", "linux/amd64", "linux/arm64", "windows/amd64", "windows/arm64"]
   },
   "notes": [
     "coact with no arguments shows the terminal-native workspace summary.",
     "Use coact @agent, coact @all, and coact plan for native-terminal coordination.",
+    "Antigravity is the third built-in adapter and launches through the native agy CLI.",
     "Provider-independent usage snapshots trigger local alerts at 20% steps by default.",
     "Collaboration reports separate audit-derived facts from subjective peer ratings.",
-    "coact ui remains available as an optional experimental local control center.",
+    "The task lifecycle is todo, assigned, active, then done; only the active owner can finish work.",
+    "coact ui provides an optional local task dashboard and animated multi-agent station.",
+    "Terminal output is reconstructed locally into a readable current-screen snapshot; terminal input remains native.",
     "coact update installs into ~/.coact and never overwrites system binaries.",
     "Real-time push remains experimental; the default workflow is turn-based inbox coordination.",
     "The control center is local-only: it binds 127.0.0.1, checks the Host header, and requires a per-run token.",

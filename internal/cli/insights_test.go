@@ -20,7 +20,7 @@ func TestUsageSetWritesSnapshotAndAlertsWorkmates(t *testing.T) {
 	if !strings.Contains(string(data), `"threshold_step": 20`) || !strings.Contains(string(data), "40") {
 		t.Fatalf("unexpected usage snapshot:\n%s", data)
 	}
-	for _, recipient := range []string{"codex", "gemini"} {
+	for _, recipient := range []string{"codex", "antigravity"} {
 		message, err := os.ReadFile(filepath.Join(dir, ".coact", "inbox", recipient+".md"))
 		if err != nil || !strings.Contains(string(message), "Usage alert") {
 			t.Fatalf("%s alert missing: %v\n%s", recipient, err, message)

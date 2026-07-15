@@ -56,6 +56,30 @@ func TestEnsureMarkedBlockUpdatesExistingContract(t *testing.T) {
 	}
 }
 
+func TestInitializeUsesAntigravityAsThirdDefault(t *testing.T) {
+	root := t.TempDir()
+	if _, err := Initialize(root, "human"); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(filepath.Join(root, ".coact", "config.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Agents) != 3 || cfg.Agents[2].ID != "antigravity" {
+		t.Fatalf("default agents = %#v", cfg.Agents)
+	}
+	contract, err := os.ReadFile(filepath.Join(root, "ANTIGRAVITY.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(contract), "COACT_AGENT=antigravity") {
+		t.Fatalf("unexpected Antigravity contract:\n%s", contract)
+	}
+	if _, err := os.Stat(filepath.Join(root, "GEMINI.md")); !os.IsNotExist(err) {
+		t.Fatalf("fresh workspace should not wire Gemini by default: %v", err)
+	}
+}
+
 func TestEnsureGitignoreDoesNotDuplicateWhenCoactDirIgnored(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, ".gitignore")
@@ -118,6 +142,71 @@ func TestMigrateRepairsMissingRequiredPathAtCurrentVersion(t *testing.T) {
 	}
 	if !containsString(cfg.Policy.ProtectedPaths, ".coact/evaluations/**") {
 		t.Fatalf("evaluation protection was not restored: %#v", cfg.Policy.ProtectedPaths)
+	}
+}
+
+func TestMigrateRetiredGeminiAgentToAntigravity(t *testing.T) {
+	cfg := config.Default()
+	cfg.Agents = []config.AgentConfig{
+		{ID: "claude", Adapter: "claude-code"},
+		{ID: "codex", Adapter: "codex"},
+		{ID: "gemini", Adapter: "gemini-cli"},
+	}
+	if !migrateRetiredGeminiAgent(cfg) {
+		t.Fatal("expected the old built-in agent layout to migrate")
+	}
+	if got := cfg.Agents[2]; got.ID != "antigravity" || got.Adapter != "antigravity-cli" {
+		t.Fatalf("third agent = %+v", got)
+	}
+}
+
+func TestMigrateRetiredGeminiPreservesWriteRestrictions(t *testing.T) {
+	cfg := config.Default()
+	cfg.Agents = []config.AgentConfig{
+		{ID: "claude", Adapter: "claude-code"},
+		{ID: "codex", Adapter: "codex"},
+		{ID: "gemini", Adapter: "gemini-cli", Write: []string{"research/**"}},
+	}
+	if !migrateRetiredGeminiAgent(cfg) {
+		t.Fatal("custom retired agent should migrate")
+	}
+	if cfg.Agents[2].ID != "antigravity" || cfg.Agents[2].Adapter != "antigravity-cli" || len(cfg.Agents[2].Write) != 1 || cfg.Agents[2].Write[0] != "research/**" {
+		t.Fatalf("custom restrictions were not preserved: %+v", cfg.Agents[2])
+	}
+}
+
+func TestMigrateRetiredGeminiDropsDuplicateWhenAntigravityExists(t *testing.T) {
+	cfg := config.Default()
+	cfg.Agents = append(cfg.Agents, config.AgentConfig{ID: "gemini", Adapter: "gemini-cli"})
+	if !migrateRetiredGeminiAgent(cfg) {
+		t.Fatal("duplicate retired agent should be removed")
+	}
+	if len(cfg.Agents) != 3 {
+		t.Fatalf("agents = %#v", cfg.Agents)
+	}
+	for _, agent := range cfg.Agents {
+		if agent.ID == "gemini" {
+			t.Fatalf("retired agent remained: %#v", cfg.Agents)
+		}
+	}
+}
+
+func TestRemoveMarkedBlockFilePreservesUserContent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "retired.md")
+	content := "before\n\n" + coactBegin + "\nold\n" + coactEnd + "\n\nafter\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := removeMarkedBlockFile(path)
+	if err != nil || !changed {
+		t.Fatalf("changed=%v err=%v", changed, err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "before\n\nafter\n" {
+		t.Fatalf("unexpected preserved content: %q", data)
 	}
 }
 

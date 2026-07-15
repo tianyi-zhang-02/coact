@@ -9,7 +9,7 @@ func TestRegistry(t *testing.T) {
 	if len(All()) < 3 {
 		t.Fatalf("want at least 3 adapters, got %d", len(All()))
 	}
-	for _, id := range []string{"claude", "codex", "gemini"} {
+	for _, id := range []string{"claude", "codex", "antigravity"} {
 		a, ok := Get(id)
 		if !ok {
 			t.Fatalf("adapter %q missing", id)
@@ -27,6 +27,12 @@ func TestRegistry(t *testing.T) {
 	}
 	if _, ok := Get("nope"); ok {
 		t.Fatal("Get should fail for an unknown id")
+	}
+	if len(Defaults()) != 3 {
+		t.Fatalf("want 3 default adapters, got %d", len(Defaults()))
+	}
+	if _, ok := Get("gemini"); ok {
+		t.Fatal("retired Gemini adapter should not remain registered")
 	}
 }
 

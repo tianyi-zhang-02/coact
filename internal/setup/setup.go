@@ -80,11 +80,20 @@ func Initialize(root, agent string) (*Result, error) {
 	}
 
 	cfg, _ := config.Load(p.ConfigPath())
-	if migrateProtectedPaths(cfg) {
+	policyMigrated := migrateProtectedPaths(cfg)
+	agentsMigrated := migrateRetiredGeminiAgent(cfg)
+	if policyMigrated || agentsMigrated {
 		if err := cfg.Save(p.ConfigPath()); err != nil {
-			return nil, fmt.Errorf("updating config policy: %w", err)
+			return nil, fmt.Errorf("updating config: %w", err)
 		}
-		note(rel(root, p.ConfigPath()) + " (policy migration)")
+		migration := "policy migration"
+		if agentsMigrated {
+			migration = "Antigravity agent migration"
+		}
+		if policyMigrated && agentsMigrated {
+			migration = "policy + Antigravity agent migration"
+		}
+		note(rel(root, p.ConfigPath()) + " (" + migration + ")")
 	}
 	for _, ac := range cfg.Agents {
 		ad, ok := adapter.Get(ac.ID)
@@ -108,10 +117,53 @@ func Initialize(root, agent string) (*Result, error) {
 			note(ad.ContractFile + " (" + ad.ID + " contract)")
 		}
 	}
+	legacyContract := filepath.Join(root, "GEMINI.md")
+	removed, err := removeMarkedBlockFile(legacyContract)
+	if err != nil {
+		return nil, fmt.Errorf("removing retired agent contract: %w", err)
+	}
+	if removed {
+		note("GEMINI.md (retired contract removed)")
+	}
 
 	ensureGitignore(root)
 	_ = journal.Append(p.JournalDir(), agent, "session.start", map[string]string{"action": "init"})
 	return res, nil
+}
+
+// migrateRetiredGeminiAgent replaces the retired third-party adapter while
+// preserving any write restrictions the workspace assigned to that role.
+func migrateRetiredGeminiAgent(cfg *config.Config) bool {
+	if cfg == nil {
+		return false
+	}
+	hasAntigravity := false
+	for _, agent := range cfg.Agents {
+		if agent.ID == "antigravity" {
+			hasAntigravity = true
+			break
+		}
+	}
+	changed := false
+	updated := make([]config.AgentConfig, 0, len(cfg.Agents))
+	for _, agent := range cfg.Agents {
+		if agent.ID != "gemini" {
+			updated = append(updated, agent)
+			continue
+		}
+		changed = true
+		if hasAntigravity {
+			continue
+		}
+		agent.ID = "antigravity"
+		agent.Adapter = "antigravity-cli"
+		updated = append(updated, agent)
+		hasAntigravity = true
+	}
+	if changed {
+		cfg.Agents = updated
+	}
+	return changed
 }
 
 func migrateProtectedPaths(cfg *config.Config) bool {
@@ -187,6 +239,40 @@ func ensureMarkedBlock(path, body string) (bool, error) {
 	}
 	b.WriteString(block + "\n")
 	return true, platform.AtomicWrite(path, []byte(b.String()), 0o644)
+}
+
+func removeMarkedBlockFile(path string) (bool, error) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	content := string(data)
+	start := strings.Index(content, coactBegin)
+	if start < 0 {
+		return false, nil
+	}
+	endRel := strings.Index(content[start:], coactEnd)
+	if endRel < 0 {
+		return false, fmt.Errorf("coact contract block in %s is missing %s", path, coactEnd)
+	}
+	end := start + endRel + len(coactEnd)
+	before := strings.TrimSpace(content[:start])
+	after := strings.TrimSpace(content[end:])
+	if before == "" && after == "" {
+		return true, os.Remove(path)
+	}
+	updated := before
+	if updated != "" && after != "" {
+		updated += "\n\n"
+	}
+	updated += after
+	if updated != "" {
+		updated += "\n"
+	}
+	return true, platform.AtomicWrite(path, []byte(updated), 0o644)
 }
 
 func ensureClaudeHook(root string) (bool, error) {
@@ -368,7 +454,7 @@ read it at the start of every session, before planning, and before claiming work
 
 - codex: implementation, tests, refactors, validation, security review.
 - claude: product copy, UX review, docs, planning critique, second-pass review.
-- gemini: optional research, alternate implementation ideas, broad review.
+- antigravity: optional research, alternate implementation ideas, broad review.
 
 ## Protocol
 

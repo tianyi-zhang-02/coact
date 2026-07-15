@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/tianyi-zhang-02/coact/internal/board"
 	"github.com/tianyi-zhang-02/coact/internal/inbox"
 	"github.com/tianyi-zhang-02/coact/internal/journal"
 	"github.com/tianyi-zhang-02/coact/internal/lockmgr"
@@ -17,6 +19,9 @@ import (
 )
 
 func cmdPlan(args []string) int {
+	if len(args) > 0 && args[0] == "finalize" {
+		return cmdPlanFinalize(args[1:])
+	}
 	if len(args) > 0 && args[0] == "status" {
 		return cmdPlanStatus(args[1:])
 	}
@@ -27,7 +32,7 @@ func cmdPlan(args []string) int {
 	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
 	agentFlag := fs.String("agent", "", "initiator id")
 	withFlag := fs.String("with", "codex,claude", "comma-separated planning agents")
-	distributorFlag := fs.String("distributor", "", "final task distributor (human, codex, claude, gemini, vote)")
+	distributorFlag := fs.String("distributor", "", "final task distributor (human, codex, claude, antigravity, vote)")
 	idFlag := fs.String("id", "", "run id (default: timestamp)")
 	pos, err := parseInterspersed(fs, args)
 	if err != nil || len(pos) == 0 {
@@ -87,6 +92,179 @@ func cmdPlan(args []string) int {
 	fmt.Printf("brief: .coact/runs/%s/brief.md\n", runID)
 	fmt.Printf("participants: %s\n", strings.Join(participants, ", "))
 	fmt.Printf("final distributor: %s\n", distributor)
+	return 0
+}
+
+type executionTask struct {
+	Owner string
+	Title string
+}
+
+type createdExecutionTask struct {
+	ID    string
+	Owner string
+	Title string
+}
+
+func cmdPlanFinalize(args []string) int {
+	fs := flag.NewFlagSet("plan finalize", flag.ContinueOnError)
+	agentFlag := fs.String("agent", "", "final distributor id")
+	positionals, err := parseInterspersed(fs, args)
+	if err != nil || len(positionals) > 1 {
+		fmt.Fprintln(os.Stderr, "usage: coact plan finalize [--agent id] [run-id]")
+		return 2
+	}
+	p, cfg, ok := loadProject()
+	if !ok {
+		return 1
+	}
+	runID := ""
+	if len(positionals) == 1 {
+		runID = safeRunID(positionals[0])
+	} else {
+		runID = latestRunID(p)
+	}
+	if runID == "" {
+		fmt.Fprintln(os.Stderr, "coact plan finalize: no planning run found")
+		return 1
+	}
+
+	runDir := filepath.Join(p.RunsDir(), runID)
+	briefPath := filepath.Join(runDir, "brief.md")
+	finalPath := filepath.Join(runDir, "final-plan.md")
+	distributor := planDistributor(briefPath)
+	actor := agentID(*agentFlag)
+	if !canFinalizePlan(actor, distributor) {
+		fmt.Fprintf(os.Stderr, "coact plan finalize: %s is not the final distributor (%s)\n", actor, distributor)
+		return 1
+	}
+
+	manager := lockmgr.New(p, cfg)
+	result, err := manager.Acquire(actor, runDir)
+	if err != nil || !result.Acquired {
+		detail := "planning run lock denied"
+		if err != nil {
+			detail = err.Error()
+		} else if result.Detail != "" {
+			detail = result.Detail
+		} else if result.Conflict != nil {
+			detail = "locked by " + result.Conflict.Owner
+		}
+		fmt.Fprintf(os.Stderr, "coact plan finalize: %s\n", detail)
+		return 1
+	}
+	defer func() { _ = manager.Release(actor, runDir) }()
+
+	status := documentStatus(finalPath)
+	if status == "finalized" {
+		fmt.Fprintf(os.Stderr, "coact plan finalize: %s is already finalized\n", runID)
+		return 1
+	}
+	if status != "pending" {
+		fmt.Fprintf(os.Stderr, "coact plan finalize: final plan status is %s, not pending\n", status)
+		return 1
+	}
+	participants := planParticipants(briefPath)
+	if len(participants) == 0 {
+		fmt.Fprintln(os.Stderr, "coact plan finalize: planning brief has no participants")
+		return 1
+	}
+	locks, err := manager.List()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "coact plan finalize: reading locks: %v\n", err)
+		return 1
+	}
+	for _, participant := range participants {
+		proposal := filepath.Join(runDir, "proposals", participant+".md")
+		if status := proposalStatus(proposal); status != "ready" {
+			fmt.Fprintf(os.Stderr, "coact plan finalize: proposal for %s is %s, not ready\n", participant, status)
+			return 1
+		}
+		if owner := lockOwnerFor(locks, planRelPath(p, proposal)); owner != "" {
+			fmt.Fprintf(os.Stderr, "coact plan finalize: proposal for %s is still locked by %s\n", participant, owner)
+			return 1
+		}
+	}
+
+	data, err := os.ReadFile(finalPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "coact plan finalize: %v\n", err)
+		return 1
+	}
+	tasks, err := parseExecutionTasks(string(data))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "coact plan finalize: %v\n", err)
+		return 1
+	}
+	allowedOwners := make(map[string]bool, len(participants))
+	for _, participant := range participants {
+		allowedOwners[participant] = true
+	}
+	for _, task := range tasks {
+		if task.Owner != "" && !allowedOwners[task.Owner] {
+			fmt.Fprintf(os.Stderr, "coact plan finalize: task owner %q is not a planning participant\n", task.Owner)
+			return 1
+		}
+	}
+
+	created := make([]createdExecutionTask, 0, len(tasks))
+	err = withBoardLock(p, func() error {
+		originalBoard, err := os.ReadFile(p.BoardPath())
+		if err != nil {
+			return err
+		}
+		sharedBoard, err := board.Load(p.BoardPath())
+		if err != nil {
+			return err
+		}
+		for _, task := range tasks {
+			added := sharedBoard.Add(task.Title)
+			createdTask := createdExecutionTask{ID: added.ID, Owner: task.Owner, Title: task.Title}
+			if task.Owner != "" {
+				assigned, err := sharedBoard.Assign(added.ID, task.Owner)
+				if err != nil {
+					return err
+				}
+				createdTask.ID = assigned.ID
+			}
+			created = append(created, createdTask)
+		}
+		if err := sharedBoard.Save(); err != nil {
+			return err
+		}
+		if err := markPlanFinalized(finalPath, created); err != nil {
+			if rollbackErr := platform.AtomicWrite(p.BoardPath(), originalBoard, 0o644); rollbackErr != nil {
+				return fmt.Errorf("updating final plan: %v; rolling back board: %v", err, rollbackErr)
+			}
+			return fmt.Errorf("updating final plan: %w (board rolled back)", err)
+		}
+		return nil
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "coact plan finalize: committing plan: %v\n", err)
+		return 1
+	}
+
+	taskIDs := make([]string, 0, len(created))
+	for _, task := range created {
+		taskIDs = append(taskIDs, task.ID)
+		_ = journal.Append(p.JournalDir(), actor, "task.add", map[string]string{
+			"id": task.ID, "owner": task.Owner, "source": "plan:" + runID,
+		})
+	}
+	_ = journal.Append(p.JournalDir(), actor, "plan.finish", map[string]string{
+		"id": runID, "count": strconv.Itoa(len(created)), "tasks": strings.Join(taskIDs, ","),
+	})
+	notifyPlanFinalized(p, runID, actor, participants, created)
+
+	fmt.Printf("planning run %s finalized by %s\n", runID, actor)
+	for _, task := range created {
+		owner := task.Owner
+		if owner == "" {
+			owner = "unassigned"
+		}
+		fmt.Printf("  %s  %-10s %s\n", task.ID, owner, task.Title)
+	}
 	return 0
 }
 
@@ -220,8 +398,8 @@ func writePlanFiles(p *project.Project, runDir, runID, brief, initiator, distrib
 3. Every planning agent runs coact plan ready %s after finishing its proposal; this marks it ready and releases the command's lock.
 4. Every planning agent reads peer proposals and may add second-pass notes under .coact/runs/%s/notes/<agent>.md.
 5. The final distributor runs coact plan status %s and waits until all required proposals are ready and unlocked.
-6. The final distributor writes .coact/runs/%s/final-plan.md.
-7. The final distributor creates execution tasks with coact task add "..."
+6. The final distributor writes .coact/runs/%s/final-plan.md and lists tasks under the Execution tasks heading.
+7. The final distributor runs coact plan finalize %s to create and assign board tasks.
 8. Agents claim tasks before implementation with coact claim <id>.
 
 ## Metadata
@@ -231,7 +409,7 @@ func writePlanFiles(p *project.Project, runDir, runID, brief, initiator, distrib
 - final_task_distributor: %s
 - created_at: %s
 
-`, runID, brief, runID, runID, runID, runID, runID, initiator, strings.Join(participants, ", "), distributor, time.Now().UTC().Format(time.RFC3339))
+`, runID, brief, runID, runID, runID, runID, runID, runID, initiator, strings.Join(participants, ", "), distributor, time.Now().UTC().Format(time.RFC3339))
 	if err := platform.AtomicWrite(filepath.Join(runDir, "brief.md"), []byte(doc), 0o644); err != nil {
 		return err
 	}
@@ -241,9 +419,18 @@ Status: pending
 Distributor: %s
 
 Do not finalize until coact plan status %s shows all required proposals are ready and unlocked.
-When proposals are ready, summarize the decision here and create board tasks.
+When proposals are ready, summarize the decision and replace the examples below.
 
-`, runID, distributor, runID)
+## Decision
+
+## Execution tasks
+
+<!-- Add one task per line. Example: - [codex] Implement the agreed change -->
+<!-- Use [unassigned] when the distributor wants an agent to claim it later. -->
+
+Run: coact plan finalize %s
+
+`, runID, distributor, runID, runID)
 	if err := platform.AtomicWrite(filepath.Join(runDir, "final-plan.md"), []byte(final), 0o644); err != nil {
 		return err
 	}
@@ -301,8 +488,140 @@ Before finalizing, run:
 
 Only finalize after all required proposals are ready and unlocked.
 
-After final planning, create/claim execution tasks through the board.
-`, runID, role, runID, runID, recipient, runID, runID, runID)
+After writing the Execution tasks section, run:
+- coact plan finalize %s
+
+Assigned agents then claim their task through the board before editing.
+`, runID, role, runID, runID, recipient, runID, runID, runID, runID)
+}
+
+func canFinalizePlan(actor, distributor string) bool {
+	if distributor == "human" || distributor == "vote" {
+		return actor == "human"
+	}
+	return distributor != "" && actor == distributor
+}
+
+func planParticipants(path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "-"))
+		if key, value, ok := strings.Cut(line, ":"); ok && strings.EqualFold(strings.TrimSpace(key), "participants") {
+			return parseAgentList(value)
+		}
+	}
+	return nil
+}
+
+func documentStatus(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "missing"
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if key, value, ok := strings.Cut(strings.TrimSpace(line), ":"); ok && strings.EqualFold(strings.TrimSpace(key), "status") {
+			status := strings.ToLower(strings.TrimSpace(value))
+			if status == "" {
+				return "unknown"
+			}
+			return status
+		}
+	}
+	return "unknown"
+}
+
+func parseExecutionTasks(content string) ([]executionTask, error) {
+	inSection := false
+	var tasks []executionTask
+	for _, rawLine := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(rawLine)
+		if strings.HasPrefix(line, "## ") {
+			if inSection {
+				break
+			}
+			inSection = strings.EqualFold(strings.TrimSpace(strings.TrimPrefix(line, "## ")), "Execution tasks")
+			continue
+		}
+		if !inSection || !strings.HasPrefix(line, "- ") {
+			continue
+		}
+		body := strings.TrimSpace(strings.TrimPrefix(line, "- "))
+		if !strings.HasPrefix(body, "[") {
+			return nil, fmt.Errorf("execution task must use `- [owner] title`: %s", line)
+		}
+		end := strings.Index(body, "]")
+		if end < 0 {
+			return nil, fmt.Errorf("execution task has an unclosed owner: %s", line)
+		}
+		rawOwner := strings.ToLower(strings.TrimSpace(body[1:end]))
+		title := strings.TrimSpace(body[end+1:])
+		if err := board.ValidateTitle(title); err != nil {
+			return nil, fmt.Errorf("invalid execution task: %w", err)
+		}
+		owner := ""
+		if rawOwner != "" && rawOwner != "-" && rawOwner != "none" && rawOwner != "unassigned" {
+			owner = sanitizeAgent(rawOwner)
+			if owner != rawOwner {
+				return nil, fmt.Errorf("invalid execution task owner %q", rawOwner)
+			}
+		}
+		tasks = append(tasks, executionTask{Owner: owner, Title: title})
+	}
+	if !inSection {
+		return nil, fmt.Errorf("final-plan.md is missing `## Execution tasks`")
+	}
+	if len(tasks) == 0 {
+		return nil, fmt.Errorf("final-plan.md has no execution tasks")
+	}
+	return tasks, nil
+}
+
+func markPlanFinalized(path string, tasks []createdExecutionTask) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(data), "\n")
+	found := false
+	for index, line := range lines {
+		if key, _, ok := strings.Cut(strings.TrimSpace(line), ":"); ok && strings.EqualFold(strings.TrimSpace(key), "status") {
+			lines[index] = "Status: finalized"
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("final plan is missing a Status field")
+	}
+	lines = append(lines, "", "## Created board tasks", "")
+	for _, task := range tasks {
+		owner := task.Owner
+		if owner == "" {
+			owner = "unassigned"
+		}
+		lines = append(lines, fmt.Sprintf("- %s [%s] %s", task.ID, owner, task.Title))
+	}
+	lines = append(lines, "", "Finalized-At: "+time.Now().UTC().Format(time.RFC3339), "")
+	return platform.AtomicWrite(path, []byte(strings.Join(lines, "\n")), 0o644)
+}
+
+func notifyPlanFinalized(p *project.Project, runID, from string, participants []string, tasks []createdExecutionTask) {
+	for _, participant := range participants {
+		var assigned []string
+		for _, task := range tasks {
+			if task.Owner == participant {
+				assigned = append(assigned, fmt.Sprintf("- %s: %s", task.ID, task.Title))
+			}
+		}
+		message := fmt.Sprintf("Planning run %s is finalized. Read `.coact/runs/%s/final-plan.md` and `coact board`.", runID, runID)
+		if len(assigned) > 0 {
+			message += "\n\nYour assigned tasks:\n" + strings.Join(assigned, "\n") + "\n\nClaim one with `coact claim <task-id>` before editing."
+		}
+		_ = inbox.Send(p.InboxDir(), from, participant, message)
+	}
 }
 
 func setProposalStatus(path, status string) error {
@@ -334,7 +653,11 @@ func planDistributor(path string) string {
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "-"))
 		if key, value, ok := strings.Cut(line, ":"); ok && strings.EqualFold(strings.TrimSpace(key), "final_task_distributor") {
-			return sanitizeAgent(value)
+			raw := strings.ToLower(strings.TrimSpace(value))
+			if raw == "" || sanitizeAgent(raw) != raw {
+				return ""
+			}
+			return raw
 		}
 	}
 	return ""
@@ -380,8 +703,12 @@ func parseAgentList(raw string) []string {
 	seen := map[string]bool{}
 	var out []string
 	for _, part := range strings.Split(raw, ",") {
+		part = strings.ToLower(strings.TrimSpace(part))
+		if part == "" {
+			continue
+		}
 		agent := sanitizeAgent(part)
-		if agent == "" || seen[agent] {
+		if agent != part || seen[agent] {
 			continue
 		}
 		seen[agent] = true
@@ -398,7 +725,11 @@ func defaultDistributor(p *project.Project) string {
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "- final_task_distributor:") {
-			return sanitizeAgent(strings.TrimSpace(strings.TrimPrefix(line, "- final_task_distributor:")))
+			raw := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(line, "- final_task_distributor:")))
+			if raw != "" && sanitizeAgent(raw) == raw {
+				return raw
+			}
+			return "human"
 		}
 	}
 	return "human"

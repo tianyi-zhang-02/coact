@@ -12,6 +12,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tianyi-zhang-02/coact/internal/board"
+	"github.com/tianyi-zhang-02/coact/internal/config"
+	"github.com/tianyi-zhang-02/coact/internal/lockmgr"
+	"github.com/tianyi-zhang-02/coact/internal/project"
+	"github.com/tianyi-zhang-02/coact/internal/setup"
 	"github.com/tianyi-zhang-02/coact/internal/versionmgr"
 )
 
@@ -71,6 +76,40 @@ func TestTaskClaimAndDoneAPI(t *testing.T) {
 	}
 }
 
+func TestTaskActionsEnforceLifecycle(t *testing.T) {
+	chdirTemp(t)
+	ts := newTestServer(t)
+	defer ts.Close()
+	postJSON(t, ts, "/api/init", nil, http.StatusOK, nil)
+
+	var created taskDTO
+	postJSON(t, ts, "/api/tasks", map[string]string{"title": "Audit task lifecycle"}, http.StatusOK, &created)
+	postJSON(t, ts, "/api/tasks/"+created.ID+"/done", map[string]string{"owner": "codex"}, http.StatusBadRequest, nil)
+
+	var assigned taskDTO
+	postJSON(t, ts, "/api/tasks/"+created.ID+"/assign", map[string]string{"owner": "codex"}, http.StatusOK, &assigned)
+	if assigned.State != "claimed" || assigned.Owner != "codex" {
+		t.Fatalf("unexpected assigned task: %#v", assigned)
+	}
+	postJSON(t, ts, "/api/tasks/"+created.ID+"/done", map[string]string{"owner": "codex"}, http.StatusBadRequest, nil)
+
+	var unassigned taskDTO
+	postJSON(t, ts, "/api/tasks/"+created.ID+"/unassign", nil, http.StatusOK, &unassigned)
+	if unassigned.State != "todo" || unassigned.Owner != "" {
+		t.Fatalf("unexpected unassigned task: %#v", unassigned)
+	}
+
+	postJSON(t, ts, "/api/tasks/"+created.ID+"/assign", map[string]string{"owner": "claude"}, http.StatusOK, nil)
+	postJSON(t, ts, "/api/tasks/"+created.ID+"/claim", map[string]string{"owner": "claude"}, http.StatusOK, nil)
+	postJSON(t, ts, "/api/tasks/"+created.ID+"/done", map[string]string{"owner": "claude"}, http.StatusOK, nil)
+
+	var reopened taskDTO
+	postJSON(t, ts, "/api/tasks/"+created.ID+"/reopen", nil, http.StatusOK, &reopened)
+	if reopened.State != "todo" || reopened.Owner != "" {
+		t.Fatalf("unexpected reopened task: %#v", reopened)
+	}
+}
+
 func TestMessagesAPIWritesInboxAndJournal(t *testing.T) {
 	dir := chdirTemp(t)
 	ts := newTestServer(t)
@@ -98,6 +137,89 @@ func TestMessagesAPIWritesInboxAndJournal(t *testing.T) {
 	}
 }
 
+func TestHandoffAPIReassignsTaskAndJournals(t *testing.T) {
+	dir := chdirTemp(t)
+	if _, err := setup.Initialize(dir, "human"); err != nil {
+		t.Fatal(err)
+	}
+	sharedBoard, err := board.Load(filepath.Join(dir, ".coact", "board.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := sharedBoard.Add("Waiting implementation")
+	if _, err := sharedBoard.Claim(created.ID, "claude", 1800); err != nil {
+		t.Fatal(err)
+	}
+	if err := sharedBoard.Save(); err != nil {
+		t.Fatal(err)
+	}
+	p := &project.Project{Root: dir, CheckoutRoot: dir}
+	cfg, err := config.Load(p.ConfigPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := lockmgr.New(p, cfg)
+	lockResult, err := manager.Acquire("claude", filepath.Join(dir, "internal", "waiting"))
+	if err != nil || !lockResult.Acquired {
+		t.Fatalf("acquire handoff lock: result=%+v err=%v", lockResult, err)
+	}
+
+	srv := &Server{token: testToken, projectHome: t.TempDir()}
+	body, _ := json.Marshal(map[string]string{"from": "claude", "to": "codex", "note": "Please continue from the shared brief."})
+	req := httptest.NewRequest(http.MethodPost, "/api/handoff", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.handleHandoff(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("handoff status %d: %s", rec.Code, rec.Body.String())
+	}
+	var result struct {
+		Tasks         []string `json:"tasks"`
+		ReleasedLocks int      `json:"released_locks"`
+		Notified      bool     `json:"notified"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Tasks) != 1 || result.Tasks[0] != created.ID {
+		t.Fatalf("unexpected handoff result: %#v", result)
+	}
+	if result.ReleasedLocks != 1 || !result.Notified {
+		t.Fatalf("handoff did not release and notify: %#v", result)
+	}
+	state, err := srv.state()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasTask(state.Tasks, created.ID, "claimed", "codex") {
+		t.Fatalf("handoff did not reassign task: %#v", state.Tasks)
+	}
+	if !hasJournalEvent(state.Log, "handoff") {
+		t.Fatalf("handoff missing from journal: %#v", state.Log)
+	}
+	inboxData, err := os.ReadFile(filepath.Join(dir, ".coact", "inbox", "codex.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(inboxData), "Human-approved handoff from claude") {
+		t.Fatalf("handoff inbox message missing: %s", inboxData)
+	}
+}
+
+func TestHandoffAPIRejectsUnknownAgent(t *testing.T) {
+	dir := chdirTemp(t)
+	if _, err := setup.Initialize(dir, "human"); err != nil {
+		t.Fatal(err)
+	}
+	srv := &Server{token: testToken, projectHome: t.TempDir()}
+	body, _ := json.Marshal(map[string]string{"from": "claude", "to": "unknown"})
+	req := httptest.NewRequest(http.MethodPost, "/api/handoff", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	srv.handleHandoff(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("unknown agent status %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestLaunchCommandsAPI(t *testing.T) {
 	chdirTemp(t)
 	ts := newTestServer(t)
@@ -116,24 +238,22 @@ func TestLaunchCommandsAPI(t *testing.T) {
 	if !strings.Contains(string(body), `"agent":"claude"`) || !strings.Contains(string(body), `"agent":"codex"`) {
 		t.Fatalf("launch commands missing expected agents: %s", body)
 	}
+	if !strings.Contains(string(body), `"agent":"antigravity"`) || strings.Contains(string(body), `"agent":"gemini"`) {
+		t.Fatalf("fresh launch commands should prefer Antigravity over legacy Gemini: %s", body)
+	}
 	if !strings.Contains(string(body), `"installed"`) || !strings.Contains(string(body), `"terminal_supported"`) {
 		t.Fatalf("launch commands missing status fields: %s", body)
 	}
 }
 
 func TestIndexUsesSimplifiedSetupAndWorkPages(t *testing.T) {
-	chdirTemp(t)
-	ts := newTestServer(t)
-	defer ts.Close()
-
-	resp, err := http.Get(ts.URL + "/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
+	srv := &Server{token: "test-token", lang: "en"}
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.handleIndex(rec, req)
+	body := rec.Body.Bytes()
 	page := string(body)
-	for _, want := range []string{"data-page-target=\"overview\"><span>Setup", "data-page-target=\"work\"><span>Work", "projectSelect", "taskOwner", "id=\"taskBoard\"", "class=\"card span-12 board-details\"", "id=\"workTerminals\"", "id=\"terminalCount\"", "work-terminal-tabs", "data-send-inbox-note"} {
+	for _, want := range []string{"data-page-target=\"station\"><span>Station", "data-page-target=\"overview\"><span>Setup", "data-page-target=\"work\"><span>Work", "projectSelect", "taskOwner", "id=\"taskBoard\"", "data-task-filter=\"open\"", "assignTask", "unassignTask", "reopenTask", "class=\"card span-12 board-details\"", "id=\"workTerminals\"", "id=\"terminalCount\"", "work-terminal-tabs", "data-send-inbox-note", "id=\"coactPixelWorld\"", "id=\"coactPixelBackground\"", "id=\"worldAgentAssist\"", "data-world-assist-handoff", "theme-ambient", "ambient-whale", "guard-strip", "id=\"msgText\"", "data-toggle-ambient", "coactAmbientDecorations", "lastDashboardSignature", "terminalDetailsVisible", "refreshInFlight", "/api/handoff", "/world/world.css?v=9", "/world/world.js?v=24"} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("index missing %q", want)
 		}
@@ -141,6 +261,89 @@ func TestIndexUsesSimplifiedSetupAndWorkPages(t *testing.T) {
 	for _, unwanted := range []string{"data-page-target=\"agents\"", "data-page-target=\"guide\"", "data-page-target=\"advanced\"", "id=\"messages-card\""} {
 		if strings.Contains(page, unwanted) {
 			t.Fatalf("index should not expose %q", unwanted)
+		}
+	}
+}
+
+func TestEmbeddedWorldAssetsAreAllowlisted(t *testing.T) {
+	srv := &Server{}
+	for path, contentType := range map[string]string{
+		"/world/world.css":                       "text/css; charset=utf-8",
+		"/world/world.js":                        "text/javascript; charset=utf-8",
+		"/world/assets/station-orbit.png":        "image/png",
+		"/world/assets/station-ocean.png":        "image/png",
+		"/world/assets/station-ecodome.png":      "image/png",
+		"/world/assets/station-wasteland.png":    "image/png",
+		"/world/assets/crew-atlas-v2.png":        "image/png",
+		"/world/assets/crew-atlas-ocean.png":     "image/png",
+		"/world/assets/crew-atlas-ecodome.png":   "image/png",
+		"/world/assets/crew-atlas-wasteland.png": "image/png",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		srv.handleWorldAsset(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200", path, rec.Code)
+		}
+		if got := rec.Header().Get("Content-Type"); got != contentType {
+			t.Fatalf("%s content type = %q, want %q", path, got, contentType)
+		}
+	}
+
+	for _, path := range []string{"/world/unknown.js", "/world/../server.go", "/world/world.png", "/world/assets/orbital-station-v3.png", "/world/assets/station-nebula.png", "/world/assets/station-aurora.png", "/world/assets/station-solar.png"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		srv.handleWorldAsset(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("%s status = %d, want 404", path, rec.Code)
+		}
+	}
+}
+
+func TestWorldHorizontalWalkKeepsOneFacingFrame(t *testing.T) {
+	script, err := embeddedWorld.ReadFile("world/world.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(script)
+	if !strings.Contains(content, "actor.direction==='up'?FRAME.up:['left','right'].includes(actor.direction)?FRAME.right:FRAME.down") {
+		t.Fatal("walking must use one stable base frame per direction")
+	}
+	if strings.Contains(content, "walkSide") {
+		t.Fatal("frame 8 is a front-running frame, not a side-walk frame")
+	}
+	for _, want := range []string{"drawWalkingCrew(actor", "entity.segmentKey!==segmentKey", "sourceY+split"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("world walking renderer missing %q", want)
+		}
+	}
+	for _, removed := range []string{"drawCrewIdentity", "drawTaskProp"} {
+		if strings.Contains(content, removed) {
+			t.Fatalf("temporary external decoration should be removed: %s", removed)
+		}
+	}
+}
+
+func TestEmbeddedAssetsAreAllowlisted(t *testing.T) {
+	srv := &Server{}
+	for _, path := range []string{"/assets/astro-orbit-work.png", "/assets/astro-nova-walk-a.png", "/assets/astro-comet-celebrate.png"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		srv.handleAsset(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200", path, rec.Code)
+		}
+		if got := rec.Header().Get("Content-Type"); got != "image/png" {
+			t.Fatalf("%s content type = %q", path, got)
+		}
+	}
+
+	for _, path := range []string{"/assets/unknown.png", "/assets/orbital-station-bg.png", "/assets/../server.go"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		srv.handleAsset(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("%s status = %d, want 404", path, rec.Code)
 		}
 	}
 }
@@ -192,11 +395,11 @@ func TestTaskAddCanScheduleOwner(t *testing.T) {
 
 	var created taskDTO
 	postJSON(t, ts, "/api/tasks", map[string]string{"title": "Run focused UI tests", "owner": "codex"}, http.StatusOK, &created)
-	if created.Owner != "codex" || created.State != "doing" {
-		t.Fatalf("scheduled task = %#v, want owner codex doing", created)
+	if created.Owner != "codex" || created.State != "claimed" {
+		t.Fatalf("scheduled task = %#v, want owner codex claimed", created)
 	}
 	state := getState(t, ts)
-	if !hasTask(state.Tasks, created.ID, "doing", "codex") {
+	if !hasTask(state.Tasks, created.ID, "claimed", "codex") {
 		t.Fatalf("state missing scheduled task: %#v", state.Tasks)
 	}
 	if !hasJournalEvent(state.Log, "task.schedule") {
@@ -257,6 +460,9 @@ func TestTerminalMirrorAPIReadsTranscriptTail(t *testing.T) {
 	}
 	if !strings.Contains(mirror.Tail, "latest output") {
 		t.Fatalf("tail missing latest output: %#v", mirror.Tail)
+	}
+	if !strings.Contains(mirror.Screen, "latest output") {
+		t.Fatalf("screen missing latest output: %#v", mirror.Screen)
 	}
 }
 

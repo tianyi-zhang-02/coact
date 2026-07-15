@@ -155,6 +155,8 @@ func randomToken() (string, error) {
 }
 
 func (s *Server) routes(mux *http.ServeMux) {
+	mux.HandleFunc("/assets/", s.handleAsset)
+	mux.HandleFunc("/world/", s.handleWorldAsset)
 	mux.HandleFunc("/", s.handleIndex)
 	mux.HandleFunc("/api/state", s.handleState)
 	mux.HandleFunc("/api/init", s.handleInit)
@@ -162,12 +164,74 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/agents/", s.handleAgentAction)
 	mux.HandleFunc("/api/tasks", s.handleTasks)
 	mux.HandleFunc("/api/tasks/", s.handleTaskAction)
+	mux.HandleFunc("/api/handoff", s.handleHandoff)
 	mux.HandleFunc("/api/messages", s.handleMessages)
 	mux.HandleFunc("/api/launch-commands", s.handleLaunchCommands)
 	mux.HandleFunc("/api/projects", s.handleProjects)
 	mux.HandleFunc("/api/projects/active", s.handleProjectActive)
 	mux.HandleFunc("/api/terminal-mirror", s.handleTerminalMirror)
 	mux.HandleFunc("/api/versions/", s.handleVersionAction)
+}
+
+func (s *Server) handleWorldAsset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	name := strings.TrimPrefix(r.URL.Path, "/world/")
+	contentType := ""
+	assetPath := "world/" + name
+	switch name {
+	case "world.css":
+		contentType = "text/css; charset=utf-8"
+	case "world.js":
+		contentType = "text/javascript; charset=utf-8"
+	case "assets/station-orbit.png", "assets/station-ocean.png", "assets/station-ecodome.png", "assets/station-wasteland.png", "assets/crew-atlas-v2.png", "assets/crew-atlas-ocean.png", "assets/crew-atlas-ecodome.png", "assets/crew-atlas-wasteland.png":
+		contentType = "image/png"
+	default:
+		http.NotFound(w, r)
+		return
+	}
+	data, err := embeddedWorld.ReadFile(assetPath)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	if r.Method == http.MethodGet {
+		_, _ = w.Write(data)
+	}
+}
+
+func (s *Server) handleAsset(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	name := strings.TrimPrefix(r.URL.Path, "/assets/")
+	switch name {
+	case "astro-orbit-idle.png", "astro-orbit-work.png", "astro-orbit-plan.png", "astro-orbit-offline.png", "astro-orbit-walk-a.png", "astro-orbit-walk-b.png", "astro-orbit-celebrate.png",
+		"astro-nova-idle.png", "astro-nova-work.png", "astro-nova-plan.png", "astro-nova-offline.png", "astro-nova-walk-a.png", "astro-nova-walk-b.png", "astro-nova-celebrate.png",
+		"astro-comet-idle.png", "astro-comet-work.png", "astro-comet-plan.png", "astro-comet-offline.png", "astro-comet-walk-a.png", "astro-comet-walk-b.png", "astro-comet-celebrate.png":
+	default:
+		http.NotFound(w, r)
+		return
+	}
+	data, err := embeddedAssets.ReadFile("assets/" + name)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+	if r.Method == http.MethodGet {
+		_, _ = w.Write(data)
+	}
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -239,6 +303,7 @@ type terminalMirrorDTO struct {
 	Size      int64  `json:"size"`
 	UpdatedAt string `json:"updated_at,omitempty"`
 	Tail      string `json:"tail"`
+	Screen    string `json:"screen,omitempty"`
 	Truncated bool   `json:"truncated"`
 }
 
@@ -291,7 +356,7 @@ func (s *Server) state() (*stateResponse, error) {
 		}
 	} else {
 		st.Mode = cfg.Mode
-		for _, ad := range adapter.All() {
+		for _, ad := range adapter.Defaults() {
 			st.Agents = append(st.Agents, agentDTO{
 				ID:          ad.ID,
 				Adapter:     ad.Binary,
@@ -337,6 +402,22 @@ func readAgents(p *project.Project, cfg *config.Config) []agentDTO {
 			}
 		}
 		out = append(out, dto)
+	}
+	return out
+}
+
+func configuredAdapters(p *project.Project) []adapter.Adapter {
+	cfg := config.Default()
+	if p != nil {
+		if loaded, err := config.Load(p.ConfigPath()); err == nil {
+			cfg = loaded
+		}
+	}
+	var out []adapter.Adapter
+	for _, agent := range cfg.Agents {
+		if ad, ok := adapter.Get(agent.ID); ok {
+			out = append(out, ad)
+		}
 	}
 	return out
 }
@@ -409,6 +490,10 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("title is required"))
 		return
 	}
+	if err := board.ValidateTitle(title); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
 	var out *board.Task
 	err = withBoardLock(p, func() error {
 		b, err := board.Load(p.BoardPath())
@@ -418,8 +503,8 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 		out = b.Add(title)
 		owner := sanitizeAgent(req.Owner)
 		if owner != "" {
-			if claimed, err := b.Claim(out.ID, owner, 1800); err == nil {
-				out = claimed
+			if assigned, err := b.Assign(out.ID, owner); err == nil {
+				out = assigned
 			} else {
 				return err
 			}
@@ -432,7 +517,6 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 		meta := map[string]string{"id": out.ID}
 		if out.Owner != "" {
 			event = "task.schedule"
-			agent = out.Owner
 			meta["owner"] = out.Owner
 		}
 		_ = journal.Append(p.JournalDir(), agent, event, meta)
@@ -465,8 +549,9 @@ func (s *Server) handleTaskAction(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	owner := sanitizeAgent(req.Owner)
-	if owner == "" {
-		owner = "human"
+	if (action == "assign" || action == "claim" || action == "done") && owner == "" {
+		writeError(w, http.StatusBadRequest, errors.New("owner is required"))
+		return
 	}
 
 	var out *board.Task
@@ -476,10 +561,16 @@ func (s *Server) handleTaskAction(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		switch action {
+		case "assign":
+			out, err = b.Assign(id, owner)
 		case "claim":
 			out, err = b.Claim(id, owner, 1800)
 		case "done":
 			out, err = b.Finish(id, owner)
+		case "unassign":
+			out, err = b.Unassign(id)
+		case "reopen":
+			out, err = b.Reopen(id)
 		default:
 			return fmt.Errorf("unknown task action %q", action)
 		}
@@ -489,11 +580,19 @@ func (s *Server) handleTaskAction(w http.ResponseWriter, r *http.Request) {
 		if err := b.Save(); err != nil {
 			return err
 		}
+		eventActor := owner
+		if eventActor == "" {
+			eventActor = "human"
+		}
 		event := "task." + action
 		if action == "done" {
 			event = "task.finish"
 		}
-		_ = journal.Append(p.JournalDir(), owner, event, map[string]string{"id": out.ID})
+		meta := map[string]string{"id": out.ID}
+		if owner != "" {
+			meta["owner"] = owner
+		}
+		_ = journal.Append(p.JournalDir(), eventActor, event, meta)
 		return nil
 	})
 	if err != nil {
@@ -538,6 +637,94 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = journal.Append(p.JournalDir(), from, "msg.send", map[string]string{"to": to, "via": "ui"})
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *Server) handleHandoff(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	p, err := s.requireProject()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	var req struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+		Note string `json:"note"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	from := sanitizeAgent(req.From)
+	to := sanitizeAgent(req.To)
+	if from == "" || to == "" || from == to {
+		writeError(w, http.StatusBadRequest, errors.New("handoff requires two different agents"))
+		return
+	}
+	cfg, err := config.Load(p.ConfigPath())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	known := map[string]bool{}
+	for _, agent := range cfg.Agents {
+		known[agent.ID] = true
+	}
+	if !known[from] || !known[to] {
+		writeError(w, http.StatusBadRequest, errors.New("handoff agents must be configured in this workspace"))
+		return
+	}
+
+	var moved []string
+	var released int
+	manager := lockmgr.New(p, cfg)
+	err = withBoardLock(p, func() error {
+		originalBoard, err := os.ReadFile(p.BoardPath())
+		if err != nil {
+			return err
+		}
+		sharedBoard, err := board.Load(p.BoardPath())
+		if err != nil {
+			return err
+		}
+		moved = sharedBoard.Reassign(from, to)
+		if err := sharedBoard.Save(); err != nil {
+			return err
+		}
+		released, err = manager.ReleaseAll(from)
+		if err != nil {
+			if rollbackErr := platform.AtomicWrite(p.BoardPath(), originalBoard, 0o644); rollbackErr != nil {
+				return fmt.Errorf("releasing locks: %v; rolling back board: %v", err, rollbackErr)
+			}
+			return fmt.Errorf("releasing locks: %w (board rolled back)", err)
+		}
+		return nil
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	note := strings.TrimSpace(req.Note)
+	message := fmt.Sprintf("Human-approved handoff from %s.", from)
+	if len(moved) > 0 {
+		message += " Tasks now yours: " + strings.Join(moved, ", ") + "."
+	}
+	if note != "" {
+		message += " Note: " + note
+	}
+	notifyErr := inbox.Send(p.InboxDir(), "human", to, message)
+	notified := notifyErr == nil
+	_ = journal.Append(p.JournalDir(), "human", "handoff", map[string]string{
+		"from": from, "to": to, "tasks": strings.Join(moved, ","), "released_locks": fmt.Sprintf("%d", released), "notified": fmt.Sprintf("%t", notified), "via": "ui",
+	})
+	response := map[string]any{"ok": true, "tasks": moved, "released_locks": released, "notified": notified}
+	if notifyErr != nil {
+		response["warning"] = "tasks moved, but recipient notification could not be written"
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) handleAgentAction(w http.ResponseWriter, r *http.Request) {
@@ -597,8 +784,13 @@ func (s *Server) handleLaunchCommands(w http.ResponseWriter, r *http.Request) {
 	if e, err := os.Executable(); err == nil {
 		exe = e
 	}
+	p, _, err := s.currentProject()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
 	var commands []launchCommandDTO
-	for _, ad := range adapter.All() {
+	for _, ad := range configuredAdapters(p) {
 		binPath, err := exec.LookPath(ad.Binary)
 		commands = append(commands, launchCommandDTO{
 			Agent:             ad.ID,
@@ -640,7 +832,7 @@ func (s *Server) handleTerminalMirror(w http.ResponseWriter, r *http.Request) {
 		}
 		agents = []adapter.Adapter{ad}
 	} else {
-		agents = adapter.All()
+		agents = configuredAdapters(p)
 	}
 	limit := int64(24 * 1024)
 	if full {
@@ -991,6 +1183,7 @@ func readTerminalMirror(p *project.Project, agent string, limit int64) terminalM
 		return out
 	}
 	out.Tail = string(data)
+	out.Screen = terminalScreenSnapshot(data)
 	return out
 }
 

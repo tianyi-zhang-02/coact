@@ -6,7 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tianyi-zhang-02/coact/internal/board"
+	"github.com/tianyi-zhang-02/coact/internal/config"
+	"github.com/tianyi-zhang-02/coact/internal/journal"
+	"github.com/tianyi-zhang-02/coact/internal/lockmgr"
 	"github.com/tianyi-zhang-02/coact/internal/presence"
+	"github.com/tianyi-zhang-02/coact/internal/project"
 	"github.com/tianyi-zhang-02/coact/internal/setup"
 )
 
@@ -47,7 +52,7 @@ func TestMentionSendsToAgentInbox(t *testing.T) {
 func TestMentionAllSkipsSender(t *testing.T) {
 	dir := chdirInitializedProject(t)
 	sessionDir := filepath.Join(dir, ".coact", "session")
-	for _, agent := range []string{"claude", "codex", "gemini"} {
+	for _, agent := range []string{"claude", "codex", "antigravity"} {
 		if err := presence.Register(sessionDir, agent, "working"); err != nil {
 			t.Fatal(err)
 		}
@@ -57,7 +62,7 @@ func TestMentionAllSkipsSender(t *testing.T) {
 		t.Fatalf("Run(@all) = %d", code)
 	}
 
-	for _, agent := range []string{"claude", "gemini"} {
+	for _, agent := range []string{"claude", "antigravity"} {
 		data, err := os.ReadFile(filepath.Join(dir, ".coact", "inbox", agent+".md"))
 		if err != nil {
 			t.Fatal(err)
@@ -88,7 +93,7 @@ func TestMentionAllOnlyTargetsLiveWorkspaceAgents(t *testing.T) {
 	if !strings.Contains(string(claudeInbox), "live only") {
 		t.Fatalf("live claude should receive broadcast:\n%s", string(claudeInbox))
 	}
-	for _, agent := range []string{"codex", "gemini"} {
+	for _, agent := range []string{"codex", "antigravity"} {
 		if data, err := os.ReadFile(filepath.Join(dir, ".coact", "inbox", agent+".md")); err == nil && strings.TrimSpace(string(data)) != "" {
 			t.Fatalf("offline %s should not receive @all broadcast:\n%s", agent, string(data))
 		}
@@ -151,6 +156,13 @@ func TestProposalStatusParsesCaseInsensitively(t *testing.T) {
 	}
 }
 
+func TestParseAgentListSkipsEmptyAndInvalidIDs(t *testing.T) {
+	got := parseAgentList("codex, ,../../,CLAUDE,codex")
+	if strings.Join(got, ",") != "codex,claude" {
+		t.Fatalf("parseAgentList = %v", got)
+	}
+}
+
 func TestPlanReadyMarksOwnProposalAndNotifiesDistributor(t *testing.T) {
 	dir := chdirInitializedProject(t)
 	if code := Run([]string{"plan", "--id", "r-002", "--with", "codex,claude", "--distributor", "claude", "Plan safely"}); code != 0 {
@@ -172,5 +184,184 @@ func TestPlanReadyMarksOwnProposalAndNotifiesDistributor(t *testing.T) {
 	}
 	if !strings.Contains(string(inbox), "Proposal ready") {
 		t.Fatalf("distributor was not notified:\n%s", inbox)
+	}
+}
+
+func TestPlanFinalizeCreatesAssignedTasksAndIsIdempotent(t *testing.T) {
+	dir := chdirInitializedProject(t)
+	if code := Run([]string{"plan", "--id", "r-003", "--with", "codex,claude", "--distributor", "claude", "Ship safely"}); code != 0 {
+		t.Fatalf("Run(plan) = %d", code)
+	}
+	for _, agent := range []string{"codex", "claude"} {
+		if code := Run([]string{"plan", "ready", "--agent", agent, "r-003"}); code != 0 {
+			t.Fatalf("Run(plan ready %s) = %d", agent, code)
+		}
+	}
+	finalPath := filepath.Join(dir, ".coact", "runs", "r-003", "final-plan.md")
+	final := `# Final plan for r-003
+
+Status: pending
+Distributor: claude
+
+## Decision
+
+Proceed with two independently owned tasks.
+
+## Execution tasks
+
+- [codex] Implement the coordination endpoint
+- [claude] Review safety and documentation
+- [unassigned] Run release smoke tests
+`
+	if err := os.WriteFile(finalPath, []byte(final), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := Run([]string{"plan", "finalize", "--agent", "claude", "r-003"}); code != 0 {
+		t.Fatalf("Run(plan finalize) = %d", code)
+	}
+
+	sharedBoard, err := board.Load(filepath.Join(dir, ".coact", "board.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tasks := sharedBoard.Tasks()
+	if len(tasks) != 4 {
+		t.Fatalf("board has %d tasks, want init example + 3 finalized tasks", len(tasks))
+	}
+	assertTask := func(owner, state, title string) {
+		t.Helper()
+		for _, task := range tasks {
+			if task.Title != title {
+				continue
+			}
+			if task.Owner != owner || task.State != state {
+				t.Fatalf("task = %+v, want owner=%q state=%q title=%q", task, owner, state, title)
+			}
+			return
+		}
+		t.Fatalf("task %q not found", title)
+	}
+	assertTask("", "todo", "Example: describe a task here")
+	assertTask("", "todo", "Run release smoke tests")
+	assertTask("claude", "claimed", "Review safety and documentation")
+	assertTask("codex", "claimed", "Implement the coordination endpoint")
+
+	finalData, err := os.ReadFile(finalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(finalData), "Status: finalized") || !strings.Contains(string(finalData), "## Created board tasks") {
+		t.Fatalf("final plan was not recorded:\n%s", finalData)
+	}
+	codexInbox, err := os.ReadFile(filepath.Join(dir, ".coact", "inbox", "codex.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(codexInbox), "Your assigned tasks") || !strings.Contains(string(codexInbox), "Implement the coordination endpoint") {
+		t.Fatalf("codex did not receive assignment:\n%s", codexInbox)
+	}
+	records, err := journal.ReadRecent(filepath.Join(dir, ".coact", "journal"), 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundFinish := false
+	for _, record := range records {
+		if record["event"] == "plan.finish" && record["id"] == "r-003" && record["tasks"] == "T-002,T-003,T-004" {
+			foundFinish = true
+			break
+		}
+	}
+	if !foundFinish {
+		t.Fatalf("plan.finish audit record missing: %+v", records)
+	}
+
+	if code := Run([]string{"plan", "finalize", "--agent", "claude", "r-003"}); code == 0 {
+		t.Fatal("second finalize should be rejected")
+	}
+	sharedBoard, err = board.Load(filepath.Join(dir, ".coact", "board.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(sharedBoard.Tasks()); got != 4 {
+		t.Fatalf("duplicate finalize created tasks: got %d", got)
+	}
+}
+
+func TestPlanFinalizeRequiresDistributorAndReadyUnlockedProposals(t *testing.T) {
+	dir := chdirInitializedProject(t)
+	if code := Run([]string{"plan", "--id", "r-004", "--with", "codex,claude", "--distributor", "claude", "Coordinate safely"}); code != 0 {
+		t.Fatalf("Run(plan) = %d", code)
+	}
+	finalPath := filepath.Join(dir, ".coact", "runs", "r-004", "final-plan.md")
+	final := `# Final plan for r-004
+
+Status: pending
+Distributor: claude
+
+## Execution tasks
+
+- [codex] Implement it
+`
+	if err := os.WriteFile(finalPath, []byte(final), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := Run([]string{"plan", "finalize", "--agent", "codex", "r-004"}); code == 0 {
+		t.Fatal("non-distributor should not finalize")
+	}
+	if code := Run([]string{"plan", "finalize", "--agent", "claude", "r-004"}); code == 0 {
+		t.Fatal("draft proposals should block finalize")
+	}
+	for _, agent := range []string{"codex", "claude"} {
+		if code := Run([]string{"plan", "ready", "--agent", agent, "r-004"}); code != 0 {
+			t.Fatalf("Run(plan ready %s) = %d", agent, code)
+		}
+	}
+
+	p := &project.Project{Root: dir, CheckoutRoot: dir}
+	cfg, err := config.Load(p.ConfigPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := lockmgr.New(p, cfg)
+	proposalPath := filepath.Join(dir, ".coact", "runs", "r-004", "proposals", "codex.md")
+	result, err := manager.Acquire("codex", proposalPath)
+	if err != nil || !result.Acquired {
+		t.Fatalf("acquire proposal lock: result=%+v err=%v", result, err)
+	}
+	if code := Run([]string{"plan", "finalize", "--agent", "claude", "r-004"}); code == 0 {
+		t.Fatal("locked proposal should block finalize")
+	}
+	if err := manager.Release("codex", proposalPath); err != nil {
+		t.Fatal(err)
+	}
+	if code := Run([]string{"plan", "finalize", "--agent", "claude", "r-004"}); code != 0 {
+		t.Fatalf("ready unlocked plan should finalize, code=%d", code)
+	}
+}
+
+func TestPlanFinalizeRejectsUnknownTaskOwner(t *testing.T) {
+	dir := chdirInitializedProject(t)
+	if code := Run([]string{"plan", "--id", "r-005", "--with", "codex,claude", "--distributor", "human", "Keep ownership explicit"}); code != 0 {
+		t.Fatalf("Run(plan) = %d", code)
+	}
+	for _, agent := range []string{"codex", "claude"} {
+		if code := Run([]string{"plan", "ready", "--agent", agent, "r-005"}); code != 0 {
+			t.Fatalf("Run(plan ready %s) = %d", agent, code)
+		}
+	}
+	finalPath := filepath.Join(dir, ".coact", "runs", "r-005", "final-plan.md")
+	final := "# Final plan\n\nStatus: pending\n\n## Execution tasks\n\n- [retired-agent] Surprise work\n"
+	if err := os.WriteFile(finalPath, []byte(final), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := Run([]string{"plan", "finalize", "--agent", "human", "r-005"}); code == 0 {
+		t.Fatal("owner outside planning participants should be rejected")
+	}
+	sharedBoard, err := board.Load(filepath.Join(dir, ".coact", "board.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(sharedBoard.Tasks()); got != 1 {
+		t.Fatalf("rejected finalize mutated board: %d tasks", got)
 	}
 }

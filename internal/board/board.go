@@ -17,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/tianyi-zhang-02/coact/internal/platform"
 )
@@ -88,6 +89,27 @@ func (b *Board) parse() []*Task {
 
 // Tasks returns all tasks currently on the board.
 func (b *Board) Tasks() []*Task { return b.parse() }
+
+// ValidateTitle rejects content that could split a board row or inject a
+// second machine-readable metadata marker.
+func ValidateTitle(title string) error {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return fmt.Errorf("task title is required")
+	}
+	if len(title) > 1024 {
+		return fmt.Errorf("task title is too long (maximum 1024 bytes)")
+	}
+	if strings.Contains(title, "<!--") || strings.Contains(title, "-->") {
+		return fmt.Errorf("task title cannot contain HTML comment markers")
+	}
+	for _, character := range title {
+		if unicode.IsControl(character) {
+			return fmt.Errorf("task title cannot contain control characters")
+		}
+	}
+	return nil
+}
 
 func glyph(state string) string {
 	switch state {
@@ -166,13 +188,69 @@ func (b *Board) Claim(id, agent string, ttlSeconds int) (*Task, error) {
 	})
 }
 
+// Assign reserves a todo task for an agent without marking work as started.
+// The assigned agent still runs Claim when implementation actually begins.
+func (b *Board) Assign(id, agent string) (*Task, error) {
+	return b.mutate(id, func(t *Task) error {
+		if strings.TrimSpace(agent) == "" {
+			return fmt.Errorf("task %s cannot be assigned to an empty owner", id)
+		}
+		if t.State != "todo" && t.State != "claimed" {
+			return fmt.Errorf("task %s cannot be assigned while %s", id, t.State)
+		}
+		if t.Owner != "" && t.Owner != agent {
+			return fmt.Errorf("task %s is already owned by %q", id, t.Owner)
+		}
+		t.Owner = agent
+		t.State = "claimed"
+		delete(t.Extra, "hb")
+		delete(t.Extra, "ttl")
+		return nil
+	})
+}
+
 // Finish marks a task done. The caller must own it.
 func (b *Board) Finish(id, agent string) (*Task, error) {
 	return b.mutate(id, func(t *Task) error {
-		if t.Owner != "" && t.Owner != agent {
+		if t.State != "doing" {
+			return fmt.Errorf("task %s must be started before it can be finished (state=%s)", id, t.State)
+		}
+		if t.Owner == "" {
+			return fmt.Errorf("task %s has no owner", id)
+		}
+		if t.Owner != agent {
 			return fmt.Errorf("task %s is owned by %q, not %q", id, t.Owner, agent)
 		}
 		t.State = "done"
+		delete(t.Extra, "hb")
+		delete(t.Extra, "ttl")
+		return nil
+	})
+}
+
+// Unassign releases a reserved task back to the unowned todo queue. Active
+// work must be handed off instead so ownership history is not silently lost.
+func (b *Board) Unassign(id string) (*Task, error) {
+	return b.mutate(id, func(t *Task) error {
+		if t.State != "claimed" {
+			return fmt.Errorf("task %s can only be unassigned while claimed (state=%s)", id, t.State)
+		}
+		t.Owner = ""
+		t.State = "todo"
+		delete(t.Extra, "hb")
+		delete(t.Extra, "ttl")
+		return nil
+	})
+}
+
+// Reopen returns a completed task to the unowned todo queue.
+func (b *Board) Reopen(id string) (*Task, error) {
+	return b.mutate(id, func(t *Task) error {
+		if t.State != "done" {
+			return fmt.Errorf("task %s can only be reopened after completion (state=%s)", id, t.State)
+		}
+		t.Owner = ""
+		t.State = "todo"
 		delete(t.Extra, "hb")
 		delete(t.Extra, "ttl")
 		return nil
@@ -187,7 +265,8 @@ func (b *Board) Reassign(from, to string) []string {
 		if t.Owner == from && t.State != "done" {
 			t.Owner = to
 			t.State = "claimed"
-			t.Extra["hb"] = nowRFC()
+			delete(t.Extra, "hb")
+			delete(t.Extra, "ttl")
 			b.lines[t.line] = t.render()
 			moved = append(moved, t.ID)
 		}

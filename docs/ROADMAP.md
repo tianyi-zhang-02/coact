@@ -26,6 +26,12 @@ Target ship: **2026-07-09** (3 days from 2026-07-06).
 > usage/evaluation state, and a feature-status matrix. The UI, managed updater,
 > and real-time bridge remain experimental.
 
+> **Progress (2026-07-14):** closed the structured-planning loop with
+> `coact plan finalize`. The configured distributor now turns reviewed proposal
+> output into pre-assigned board tasks under a planning-run lock, with readiness
+> validation, duplicate-finalize protection, participant notifications, and
+> journaled task IDs.
+
 ## What "usable MVP" means
 
 The demo that must work end to end: **one agent is editing a path; another
@@ -51,7 +57,7 @@ installs in one line, it's an MVP.
 
 ## Scope
 
-**In:** Claude Code + Codex + Gemini adapters, native-terminal workflow,
+**In:** Claude Code + Codex + Antigravity adapters, native-terminal workflow,
 `@agent` inbox messaging, planning runs, shared local memory, shared tree,
 advisory locks with Claude L2 hook enforcement, capability policy, board,
 journal, status, worktree mode + merge gates, and real release.
@@ -71,7 +77,8 @@ The acceptance bar for the first public release:
 2. `coact @agent` and `coact @all` send local, journaled inbox messages without
    executing shell commands.
 3. `coact plan` creates `.coact/runs/<run>/` with a brief, proposal files,
-   final-plan file, and inbox notifications for participating agents.
+   final-plan file, and inbox notifications; `coact plan finalize` validates the
+   chosen distributor and proposals before creating assigned board tasks.
 4. `.coact/team.md` defines coordination preferences; `.coact/memory/project.md`
    carries local shared project memory.
 5. `coact update` downloads releases into `~/.coact/bin`, verifies SHA-256, and

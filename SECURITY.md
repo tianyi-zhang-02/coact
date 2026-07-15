@@ -128,6 +128,14 @@ repository.
   and is plain text; every significant action is appended to the journal.
 - **Concurrent local reports.** Usage snapshots and peer ratings use local
   meta-locks; shared threshold history is separately serialized.
+- **Planning commit gate.** `coact plan finalize` is restricted to the configured
+  distributor, locks the full planning run while checking required proposals,
+  serializes board mutation, rejects unknown owners and repeated finalization,
+  and journals the resulting task IDs.
+- **Human-approved UI handoff.** Waiting suggestions never transfer work by
+  themselves. The local UI requires an explicit confirmation and valid CSRF
+  token, restricts both sides to configured workspace agents, serializes board
+  reassignment, releases the former owner's locks, and journals the result.
 
 ## Auditing and removing
 

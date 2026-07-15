@@ -17,11 +17,14 @@ type Adapter struct {
 var builtin = []Adapter{
 	{ID: "claude", Binary: "claude", ContractFile: "CLAUDE.md", HardHook: true},
 	{ID: "codex", Binary: "codex", ContractFile: "AGENTS.md", HardHook: false},
-	{ID: "gemini", Binary: "gemini", ContractFile: "GEMINI.md", HardHook: false},
+	{ID: "antigravity", Binary: "agy", ContractFile: "ANTIGRAVITY.md", HardHook: false},
 }
 
 // All returns every built-in adapter.
 func All() []Adapter { return builtin }
+
+// Defaults returns the adapters wired into a fresh workspace.
+func Defaults() []Adapter { return builtin }
 
 // Get returns the adapter for id.
 func Get(id string) (Adapter, bool) {

@@ -30,8 +30,8 @@ func Run(args []string) int {
 		return cmdClaude(rest)
 	case "codex":
 		return cmdCodex(rest)
-	case "gemini":
-		return cmdGemini(rest)
+	case "antigravity", "agy":
+		return cmdAntigravity(rest)
 	case "adapters":
 		return cmdAdapters(rest)
 	case "zh":
@@ -162,7 +162,7 @@ Commands:
   deinit           Remove coact's wiring (--purge also deletes .coact/)
   claude [args]    Launch Claude Code wired into coact (--worktree to isolate)
   codex [args]     Launch Codex wired into coact (--worktree to isolate)
-  gemini [args]    Launch Gemini CLI wired into coact
+  antigravity      Launch Antigravity CLI (agy) wired into coact
   adapters         List the agents coact can coordinate
   zh check         Diagnose the Chinese expression adapter trigger/protection
   usage            Track quota windows and 20% threshold alerts (set | report | alerts)
@@ -177,13 +177,13 @@ Commands:
   done <id>        Mark a claimed task done
   @agent <text>    Send an inbox message, e.g. coact @claude "please review"
   @all <text>      Broadcast an inbox message to all built-in agents
-  plan "<brief>"   Start planning; use plan ready/status to coordinate completion
+  plan "<brief>"   Start planning; use plan ready/status/finalize for completion
   msg <to> <text>  Send a message to another agent
   inbox            Read your messages from other agents
   handoff <to>     Hand your tasks + context to another agent
   channel <agent>  Run the Claude Code channel MCP server (real-time push)
   bridge codex     Drive Codex's app-server, relaying live to/from Claude
-  task add "<t>"   Add a task to the board
+  task <action>     Add, assign, unassign, or reopen a task
   sidecar          Run the presence heartbeat for this session
   log              Show recent journal events (oversight view)
   policy           Show or check write policy (check <path> | show)
@@ -205,9 +205,11 @@ Examples:
   coact sidecar &          # keep this session live
   coact @codex "please review my proposal"
   coact plan --with codex,claude --distributor codex "Build the auth module"
+  coact plan finalize --agent codex
   coact usage set --agent claude --percent 40 --refresh-in 7d
   coact eval rate --peer claude --score 4 --note "clear review"
   coact task add "Add rate limiting"
+  coact task assign T-001 codex
   coact claim T-001
   coact lock src/api
   coact update --channel stable

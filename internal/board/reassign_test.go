@@ -21,6 +21,9 @@ func TestReassign(t *testing.T) {
 		if (tk.ID == "T-011" || tk.ID == "T-014") && (tk.Owner != "codex" || tk.State != "claimed") {
 			t.Fatalf("task %s not handed off correctly: %+v", tk.ID, tk)
 		}
+		if (tk.ID == "T-011" || tk.ID == "T-014") && (tk.Extra["hb"] != "" || tk.Extra["ttl"] != "") {
+			t.Fatalf("task %s retained active-work lease after handoff: %+v", tk.ID, tk.Extra)
+		}
 	}
 	// the done task stays with codex, untouched
 	if got := taskByID(b, "T-009"); got.State != "done" {

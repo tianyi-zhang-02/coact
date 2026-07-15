@@ -34,7 +34,7 @@ checksum:
   name_template: "checksums.txt"
 
 release:
-  draft: true
+  draft: false
   prerelease: auto
   extra_files:
     - glob: ./release/coact_manifest.json

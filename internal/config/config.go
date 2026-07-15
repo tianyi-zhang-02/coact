@@ -48,12 +48,12 @@ type PolicyConfig struct {
 // Default returns the built-in configuration used by `coact init`.
 func Default() *Config {
 	return &Config{
-		Version: "0.2",
+		Version: "0.3",
 		Mode:    "shared",
 		Agents: []AgentConfig{
 			{ID: "claude", Adapter: "claude-code"},
 			{ID: "codex", Adapter: "codex"},
-			{ID: "gemini", Adapter: "gemini-cli"},
+			{ID: "antigravity", Adapter: "antigravity-cli"},
 		},
 		Locks: LockConfig{
 			DefaultTTLSeconds:      900,

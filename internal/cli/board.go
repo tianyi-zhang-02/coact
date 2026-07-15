@@ -137,13 +137,56 @@ func cmdDone(args []string) int {
 }
 
 func cmdTask(args []string) int {
-	if len(args) == 0 || args[0] != "add" {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: coact task <add|assign|unassign|reopen> ...")
+		return 2
+	}
+	switch args[0] {
+	case "add":
+		return cmdTaskAdd(args[1:])
+	case "assign":
+		if len(args) != 3 {
+			fmt.Fprintln(os.Stderr, "usage: coact task assign <task-id> <agent>")
+			return 2
+		}
+		owner := agentID(args[2])
+		if owner == "" {
+			fmt.Fprintln(os.Stderr, "coact task assign: agent must contain a-z, 0-9, _ or -")
+			return 2
+		}
+		return mutateTask(args[1], "human", "task.assign", func(b *board.Board) (*board.Task, error) {
+			return b.Assign(args[1], owner)
+		})
+	case "unassign":
+		if len(args) != 2 {
+			fmt.Fprintln(os.Stderr, "usage: coact task unassign <task-id>")
+			return 2
+		}
+		return mutateTask(args[1], "human", "task.unassign", func(b *board.Board) (*board.Task, error) {
+			return b.Unassign(args[1])
+		})
+	case "reopen":
+		if len(args) != 2 {
+			fmt.Fprintln(os.Stderr, "usage: coact task reopen <task-id>")
+			return 2
+		}
+		return mutateTask(args[1], "human", "task.reopen", func(b *board.Board) (*board.Task, error) {
+			return b.Reopen(args[1])
+		})
+	default:
+		fmt.Fprintln(os.Stderr, "usage: coact task <add|assign|unassign|reopen> ...")
+		return 2
+	}
+}
+
+func cmdTaskAdd(args []string) int {
+	title := strings.TrimSpace(strings.Join(args, " "))
+	if title == "" {
 		fmt.Fprintln(os.Stderr, "usage: coact task add \"<title>\"")
 		return 2
 	}
-	title := strings.TrimSpace(strings.Join(args[1:], " "))
-	if title == "" {
-		fmt.Fprintln(os.Stderr, "usage: coact task add \"<title>\"")
+	if err := board.ValidateTitle(title); err != nil {
+		fmt.Fprintf(os.Stderr, "coact task add: %v\n", err)
 		return 2
 	}
 	p, _, ok := loadProject()
@@ -161,6 +204,34 @@ func cmdTask(args []string) int {
 		}
 		_ = journal.Append(p.JournalDir(), agentID(""), "task.add", map[string]string{"id": t.ID})
 		fmt.Printf("added %s: %s\n", t.ID, t.Title)
+		return nil
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "coact: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func mutateTask(id, actor, event string, mutate func(*board.Board) (*board.Task, error)) int {
+	p, _, ok := loadProject()
+	if !ok {
+		return 1
+	}
+	err := withBoardLock(p, func() error {
+		b, err := board.Load(p.BoardPath())
+		if err != nil {
+			return err
+		}
+		task, err := mutate(b)
+		if err != nil {
+			return err
+		}
+		if err := b.Save(); err != nil {
+			return err
+		}
+		_ = journal.Append(p.JournalDir(), actor, event, map[string]string{"id": task.ID, "owner": task.Owner})
+		fmt.Printf("%s %s (%s)\n", strings.TrimPrefix(event, "task."), task.ID, task.Title)
 		return nil
 	})
 	if err != nil {

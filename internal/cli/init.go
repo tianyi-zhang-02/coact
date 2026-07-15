@@ -34,7 +34,7 @@ verify it works (no second agent needed):
   coact doctor           checks the wiring and runs an enforcement self-test
 
 then launch each agent in its own terminal — one command each:
-  coact claude          # or:  coact codex   /   coact gemini
+  coact claude          # or:  coact codex   /   coact antigravity
 
 coact adds a gate — it does not disable your permissions, and the hook fails
 open, so if coact ever errors your editing still works. Run "coact adapters" to

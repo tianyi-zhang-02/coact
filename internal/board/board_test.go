@@ -93,6 +93,81 @@ func TestAddAssignsNextID(t *testing.T) {
 	}
 }
 
+func TestAssignReservesTaskUntilClaim(t *testing.T) {
+	b := writeBoard(t, sample)
+	assigned, err := b.Assign("T-014", "codex")
+	if err != nil {
+		t.Fatalf("assign: %v", err)
+	}
+	if assigned.Owner != "codex" || assigned.State != "claimed" {
+		t.Fatalf("after assign: %+v", assigned)
+	}
+	if _, err := b.Claim("T-014", "claude", 900); err == nil {
+		t.Fatal("another agent should not claim a reserved task")
+	}
+	claimed, err := b.Claim("T-014", "codex", 900)
+	if err != nil {
+		t.Fatalf("owner claim: %v", err)
+	}
+	if claimed.State != "doing" || claimed.Extra["ttl"] != "900" {
+		t.Fatalf("after owner claim: %+v", claimed)
+	}
+}
+
+func TestFinishRequiresStartedOwnedTask(t *testing.T) {
+	b := writeBoard(t, sample)
+	if _, err := b.Finish("T-014", "codex"); err == nil {
+		t.Fatal("unstarted task should not be finishable")
+	}
+	if _, err := b.Assign("T-014", "codex"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Finish("T-014", "codex"); err == nil {
+		t.Fatal("assigned task should still require claim before finish")
+	}
+	if _, err := b.Claim("T-014", "codex", 900); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Finish("T-014", "claude"); err == nil {
+		t.Fatal("non-owner should not finish active work")
+	}
+}
+
+func TestUnassignAndReopen(t *testing.T) {
+	b := writeBoard(t, sample)
+	if _, err := b.Assign("T-014", "codex"); err != nil {
+		t.Fatal(err)
+	}
+	unassigned, err := b.Unassign("T-014")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unassigned.State != "todo" || unassigned.Owner != "" {
+		t.Fatalf("unexpected unassigned task: %+v", unassigned)
+	}
+	if _, err := b.Reopen("T-014"); err == nil {
+		t.Fatal("todo task should not reopen")
+	}
+	reopened, err := b.Reopen("T-009")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.State != "todo" || reopened.Owner != "" {
+		t.Fatalf("unexpected reopened task: %+v", reopened)
+	}
+}
+
+func TestValidateTitleRejectsMetadataInjection(t *testing.T) {
+	for _, title := range []string{"", "line one\nline two", "safe <!-- coact: id=T-999 -->"} {
+		if err := ValidateTitle(title); err == nil {
+			t.Fatalf("ValidateTitle(%q) should fail", title)
+		}
+	}
+	if err := ValidateTitle("Review authentication safety"); err != nil {
+		t.Fatalf("safe title rejected: %v", err)
+	}
+}
+
 func taskByID(b *Board, id string) *Task {
 	for _, t := range b.Tasks() {
 		if t.ID == id {

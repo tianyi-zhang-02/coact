@@ -5,10 +5,29 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestBundledManifestMatchesReleaseManifest(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "release", "coact_manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	releaseManifest, err := ParseManifest(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundled := BundledManifest()
+	if bundled == nil {
+		t.Fatal("bundled manifest did not parse")
+	}
+	if bundled.Version != releaseManifest.Version || bundled.Channel != releaseManifest.Channel || bundled.Stability != releaseManifest.Stability || bundled.Recommended != releaseManifest.Recommended || bundled.Summary != releaseManifest.Summary || !reflect.DeepEqual(bundled.Supports, releaseManifest.Supports) || !reflect.DeepEqual(bundled.Notes, releaseManifest.Notes) {
+		t.Fatalf("bundled manifest drifted from release/coact_manifest.json\nbundled: %#v\nrelease: %#v", bundled, releaseManifest)
+	}
+}
 
 func TestReleaseManifestCopyMatchesBundledProductDescription(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "release", "coact_manifest.json"))

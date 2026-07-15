@@ -100,6 +100,17 @@ another agent, releases its locks, and messages the recipient with context — t
 explicit "I'm stopping / hitting my plan limit, take over" move. Real-time
 mid-turn push and automatic quota-triggered hand-off remain on the roadmap.
 
+## Planning commit gate
+
+`coact plan` collects independent proposals under `.coact/runs/<run>/`.
+Participants mark their own proposal ready with `coact plan ready`; this command
+uses a path lock while updating status. The configured distributor then writes
+an `## Execution tasks` section and runs `coact plan finalize`. Finalization
+locks the whole run, verifies every required proposal is ready and unlocked,
+validates owners against the participant list, and updates `board.md` under its
+dedicated meta-lock. Assigned work enters `claimed`, not `doing`, so activity is
+only reported after the owner explicitly runs `coact claim`.
+
 ## Components
 
 | Package | Responsibility |

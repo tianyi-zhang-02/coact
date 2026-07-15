@@ -17,9 +17,9 @@ import (
 	"github.com/tianyi-zhang-02/coact/internal/project"
 )
 
-func cmdClaude(args []string) int { return launchAdapter("claude", args) }
-func cmdCodex(args []string) int  { return launchAdapter("codex", args) }
-func cmdGemini(args []string) int { return launchAdapter("gemini", args) }
+func cmdClaude(args []string) int      { return launchAdapter("claude", args) }
+func cmdCodex(args []string) int       { return launchAdapter("codex", args) }
+func cmdAntigravity(args []string) int { return launchAdapter("antigravity", args) }
 
 func launchAdapter(id string, args []string) int {
 	ad, ok := adapter.Get(id)

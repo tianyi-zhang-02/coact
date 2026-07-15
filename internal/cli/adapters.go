@@ -10,7 +10,7 @@ import (
 func cmdAdapters(args []string) int {
 	fmt.Println("agents CoAct can coordinate:")
 	for _, a := range adapter.All() {
-		fmt.Printf("  %-8s  launch: coact %-7s  contract: %-10s  %s\n",
+		fmt.Printf("  %-12s  launch: coact %-12s  contract: %-15s  %s\n",
 			a.ID, a.ID, a.ContractFile, a.Enforcement())
 	}
 	fmt.Println("\nreal-time push (mid-turn) is Claude-only; others coordinate turn-based.")
