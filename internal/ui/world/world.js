@@ -5,10 +5,18 @@
   const HEIGHT = 512;
   const MOVING_FRAME_INTERVAL = 16;
   const IDLE_FRAME_INTERVAL = 50;
+  const CHROMIUM_MOVING_FRAME_INTERVAL = 33;
+  const CHROMIUM_PRESSURE_FRAME_INTERVAL = 40;
+  const CHROMIUM_IDLE_FRAME_INTERVAL = 75;
+  const LITE_MOVING_FRAME_INTERVAL = 40;
+  const LITE_IDLE_FRAME_INTERVAL = 100;
   const REDUCED_MOTION_FRAME_INTERVAL = 100;
   const BACKGROUND_FRAME_INTERVAL = 50;
+  const CHROMIUM_BACKGROUND_FRAME_INTERVAL = 180;
+  const LITE_BACKGROUND_FRAME_INTERVAL = 400;
   const SLOW_BACKGROUND_FRAME_INTERVAL = 220;
   const REDUCED_MOTION_BACKGROUND_INTERVAL = 180;
+  const IS_CHROMIUM = /(?:Chrome|Chromium|CriOS|Edg)\//.test(navigator.userAgent || '') && !/(?:OPR|Opera)\//.test(navigator.userAgent || '');
   const AIRLOCK = {x:384,y:154};
   const TABLE_SEATS = [{x:290,y:250},{x:384,y:184},{x:478,y:250},{x:384,y:330}];
   const AGENT_SLOTS = [
@@ -93,6 +101,8 @@
       this.modeIndex = Number(localStorage.getItem('coactWorldTheme') || 0);
       if (!Number.isFinite(this.modeIndex)) this.modeIndex = 0;
       this.modeIndex = ((this.modeIndex % MODES.length) + MODES.length) % MODES.length;
+      this.chromium = IS_CHROMIUM;
+      this.root.classList.toggle('is-chromium',this.chromium);
       this.reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
       this.qualityPreference = ['auto','smooth','lite'].includes(localStorage.getItem('coactWorldQuality'))?localStorage.getItem('coactWorldQuality'):'auto';
       this.paused = false;
@@ -110,7 +120,7 @@
       this.averageFrameGap = 16.7;
       this.slowDrawCount = 0;
       this.performancePressure = 0;
-      this.lowPowerBackground = this.qualityPreference==='lite';
+      this.lowPowerBackground = this.qualityPreference==='lite'||(this.chromium&&this.qualityPreference==='auto');
       this.assetsReady = false;
       this.assetsError = '';
       this.hasSyncedState = false;
@@ -167,7 +177,7 @@
         this.paused=!this.paused;this.syncControls();this.safeDraw();
       });
       this.root.querySelector('[data-world-quality]')?.addEventListener('click',()=>{
-        const modes=['auto','smooth','lite'];this.qualityPreference=modes[(modes.indexOf(this.qualityPreference)+1)%modes.length];localStorage.setItem('coactWorldQuality',this.qualityPreference);this.performancePressure=0;this.setLowPowerBackground(this.qualityPreference==='lite');this.syncControls();this.backgroundReady=false;this.safeDraw();
+        const modes=['auto','smooth','lite'];this.qualityPreference=modes[(modes.indexOf(this.qualityPreference)+1)%modes.length];localStorage.setItem('coactWorldQuality',this.qualityPreference);this.performancePressure=0;this.setLowPowerBackground(this.qualityPreference==='lite'||(this.chromium&&this.qualityPreference==='auto'));this.syncControls();this.backgroundReady=false;this.safeDraw();
       });
       this.root.querySelector('[data-world-theme]')?.addEventListener('click',()=>{
         this.previousModeIndex=this.modeIndex;this.modeIndex=(this.modeIndex+1)%MODES.length;this.sceneChangedAt=this.worldTime;this.backgroundReady=false;localStorage.setItem('coactWorldTheme',String(this.modeIndex));this.syncControls();if(this.selected)this.renderSelected();this.safeDraw();
@@ -191,7 +201,7 @@
       const pause=this.root.querySelector('[data-world-pause]');
       if (pause) {pause.textContent=this.paused?'Resume':'Pause';pause.setAttribute('aria-pressed',String(!this.paused));}
       const quality=this.root.querySelector('[data-world-quality]');
-      if(quality){const adaptive=this.qualityPreference==='auto'&&this.lowPowerBackground;quality.textContent=this.qualityPreference==='smooth'?'MAX':this.qualityPreference==='lite'?'LITE':adaptive?'AUTO·LITE':'AUTO';quality.title=this.qualityPreference==='auto'?'Automatically protects character frame rate':this.qualityPreference==='smooth'?'Maximum background detail':'Reduced background detail';}
+      if(quality){const adaptive=this.qualityPreference==='auto'&&this.lowPowerBackground,chromeAuto=this.chromium&&this.qualityPreference==='auto';quality.textContent=this.qualityPreference==='smooth'?'MAX':this.qualityPreference==='lite'?'LITE':chromeAuto?'AUTO·30':adaptive?'AUTO·LITE':'AUTO';quality.title=chromeAuto?'Chrome optimized: stable 30 FPS characters with a reduced background refresh rate':this.qualityPreference==='auto'?'Automatically protects character frame rate':this.qualityPreference==='smooth'?'Maximum background detail':'Reduced background detail';}
       const mode=this.root.querySelector('[data-world-theme]');
       if (mode) mode.textContent=MODES[this.modeIndex];
       const titles=['CoAct Orbital Crew','CoAct Shallow Sea Lab','CoAct Waterfall Habitat','CoAct Wasteland Outpost'];
@@ -427,9 +437,23 @@
       if(!this.paused){const motionDelta=this.reducedMotion?delta*.7:delta;this.worldTime+=motionDelta;this.step(motionDelta);}
       this.frameCount++;
       const entitiesMoving=[...this.crew.values()].some(actor=>actor.live&&actor.path.length)||this.services.some(bot=>bot.path.length);
-      const frameInterval=this.reducedMotion?REDUCED_MOTION_FRAME_INTERVAL:entitiesMoving?MOVING_FRAME_INTERVAL:IDLE_FRAME_INTERVAL;
+      const frameInterval=this.foregroundInterval(entitiesMoving);
       if(time-this.lastDrawTime>=frameInterval){this.lastDrawTime=time;this.safeDraw();}
       this.scheduleFrame();
+    }
+
+    foregroundInterval(entitiesMoving) {
+      if(this.reducedMotion)return REDUCED_MOTION_FRAME_INTERVAL;
+      if(this.qualityPreference==='lite')return entitiesMoving?LITE_MOVING_FRAME_INTERVAL:LITE_IDLE_FRAME_INTERVAL;
+      if(this.chromium&&this.qualityPreference==='auto')return entitiesMoving?(this.performancePressure>=18?CHROMIUM_PRESSURE_FRAME_INTERVAL:CHROMIUM_MOVING_FRAME_INTERVAL):CHROMIUM_IDLE_FRAME_INTERVAL;
+      return entitiesMoving?MOVING_FRAME_INTERVAL:IDLE_FRAME_INTERVAL;
+    }
+
+    backgroundInterval() {
+      if(this.reducedMotion)return REDUCED_MOTION_BACKGROUND_INTERVAL;
+      if(this.qualityPreference==='lite')return LITE_BACKGROUND_FRAME_INTERVAL;
+      if(this.chromium&&this.qualityPreference==='auto')return CHROMIUM_BACKGROUND_FRAME_INTERVAL;
+      return this.lowPowerBackground?SLOW_BACKGROUND_FRAME_INTERVAL:BACKGROUND_FRAME_INTERVAL;
     }
 
     step(delta) {
@@ -488,6 +512,7 @@
       if(this.qualityPreference==='lite'){this.performancePressure=30;this.setLowPowerBackground(true);return;}
       const slow=this.averageFrameGap>24||this.averageDrawCost>11||this.slowDrawCount>=8;
       this.performancePressure=clamp(this.performancePressure+(slow?1:-.05),0,30);
+      if(this.chromium){this.setLowPowerBackground(true);return;}
       if(!this.lowPowerBackground&&this.performancePressure>=12)this.setLowPowerBackground(true);
       else if(this.lowPowerBackground&&this.performancePressure<=3)this.setLowPowerBackground(false);
     }
@@ -500,7 +525,7 @@
       const ctx=this.ctx;ctx.clearRect(0,0,WIDTH,HEIGHT);
       if(!this.assetsReady){this.drawLoading();return;}
       ctx.imageSmoothingEnabled=false;
-      const transition=clamp((this.worldTime-this.sceneChangedAt)/650,0,1),backgroundInterval=this.reducedMotion?REDUCED_MOTION_BACKGROUND_INTERVAL:(this.lowPowerBackground?SLOW_BACKGROUND_FRAME_INTERVAL:BACKGROUND_FRAME_INTERVAL);
+      const transition=clamp((this.worldTime-this.sceneChangedAt)/650,0,1),backgroundInterval=this.backgroundInterval();
       if(!this.backgroundReady||this.worldTime-this.lastBackgroundDrawTime>=backgroundInterval)this.renderBackground(transition);
       const entities=[...this.services.map(bot=>({kind:'service',value:bot,y:bot.py})),...[...this.crew.values()].filter(actor=>actor.mode!=='hidden').map(actor=>({kind:'crew',value:actor,y:actor.py}))].sort((a,b)=>a.y-b.y);
       entities.forEach(entity=>entity.kind==='crew'?this.drawCrew(entity.value):this.drawService(entity.value));

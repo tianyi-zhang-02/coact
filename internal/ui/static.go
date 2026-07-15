@@ -1937,7 +1937,7 @@ const indexHTML = `<!doctype html>
   </div>
   <div class="toast" id="toast"></div>
 
-  <script src="/world/world.js?v=27"></script>
+  <script src="/world/world.js?v=28"></script>
   <script>
     const TOKEN = "__COACT_TOKEN__";
     let lastBrief = null;

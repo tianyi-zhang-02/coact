@@ -253,7 +253,7 @@ func TestIndexUsesSimplifiedSetupAndWorkPages(t *testing.T) {
 	srv.handleIndex(rec, req)
 	body := rec.Body.Bytes()
 	page := string(body)
-	for _, want := range []string{"data-page-target=\"station\"><span>Station", "data-page-target=\"overview\"><span>Setup", "data-page-target=\"work\"><span>Work", "projectSelect", "taskOwner", "taskPrompt", "planBrief", "planApproval", "approvePlan", "/api/plans", "id=\"taskBoard\"", "data-task-filter=\"open\"", "assignTask", "unassignTask", "reopenTask", "class=\"card span-12 board-details\"", "id=\"workTerminals\"", "id=\"terminalCount\"", "work-terminal-tabs", "data-send-inbox-note", "id=\"coactPixelWorld\"", "id=\"coactPixelBackground\"", "id=\"worldAgentAssist\"", "data-world-assist-handoff", "data-world-quality", "theme-ambient", "ambient-whale", "guard-strip", "id=\"msgText\"", "data-toggle-ambient", "coactAmbientDecorations", "lastDashboardSignature", "terminalDetailsVisible", "refreshInFlight", "/api/handoff", "/world/world.css?v=10", "/world/world.js?v=27"} {
+	for _, want := range []string{"data-page-target=\"station\"><span>Station", "data-page-target=\"overview\"><span>Setup", "data-page-target=\"work\"><span>Work", "projectSelect", "taskOwner", "taskPrompt", "planBrief", "planApproval", "approvePlan", "/api/plans", "id=\"taskBoard\"", "data-task-filter=\"open\"", "assignTask", "unassignTask", "reopenTask", "class=\"card span-12 board-details\"", "id=\"workTerminals\"", "id=\"terminalCount\"", "work-terminal-tabs", "data-send-inbox-note", "id=\"coactPixelWorld\"", "id=\"coactPixelBackground\"", "id=\"worldAgentAssist\"", "data-world-assist-handoff", "data-world-quality", "theme-ambient", "ambient-whale", "guard-strip", "id=\"msgText\"", "data-toggle-ambient", "coactAmbientDecorations", "lastDashboardSignature", "terminalDetailsVisible", "refreshInFlight", "/api/handoff", "/world/world.css?v=10", "/world/world.js?v=28"} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("index missing %q", want)
 		}
@@ -332,10 +332,16 @@ func TestWorldRendererUsesChromeFriendlyFrameBudget(t *testing.T) {
 	content := string(script)
 	for _, want := range []string{
 		"const MOVING_FRAME_INTERVAL = 16",
+		"const CHROMIUM_MOVING_FRAME_INTERVAL = 33",
+		"const CHROMIUM_PRESSURE_FRAME_INTERVAL = 40",
+		"const CHROMIUM_BACKGROUND_FRAME_INTERVAL = 180",
 		"const IDLE_FRAME_INTERVAL = 50",
 		"const BACKGROUND_FRAME_INTERVAL = 50",
 		"const SLOW_BACKGROUND_FRAME_INTERVAL = 220",
 		"desynchronized:true",
+		"this.chromium = IS_CHROMIUM",
+		"foregroundInterval(entitiesMoving)",
+		"backgroundInterval()",
 		"this.scheduleFrame(180)",
 		"this.averageFrameGap>24",
 		"this.qualityPreference==='lite'",
@@ -351,7 +357,7 @@ func TestWorldRendererUsesChromeFriendlyFrameBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	css := string(styles)
-	for _, want := range []string{"aspect-ratio:3/2", "width:min(100%,calc((100vh - 24px)*1.5))"} {
+	for _, want := range []string{"aspect-ratio:3/2", "width:min(100%,calc((100vh - 24px)*1.5))", ".pixel-world-shell.is-chromium .pixel-world-viewport canvas { transform:none; }"} {
 		if !strings.Contains(css, want) {
 			t.Fatalf("world canvas sizing missing %q", want)
 		}
