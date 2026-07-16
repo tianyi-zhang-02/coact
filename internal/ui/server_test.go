@@ -713,7 +713,11 @@ func newTestServerWithLauncher(t *testing.T, launcher func(agent, exe, root stri
 
 func newTestServerWithLauncherAndHome(t *testing.T, launcher func(agent, exe, root string) error, versionHome string) *httptest.Server {
 	t.Helper()
-	srv := &Server{token: testToken, launchAgent: launcher, versionHome: versionHome, projectHome: t.TempDir()}
+	root, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &Server{token: testToken, launchAgent: launcher, versionHome: versionHome, projectHome: t.TempDir(), activeRoot: root}
 	mux := http.NewServeMux()
 	srv.routes(mux)
 	// Route through guard so tests exercise the real Host + token defenses.
