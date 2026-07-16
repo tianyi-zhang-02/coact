@@ -282,4 +282,10 @@ cd coact
 go build -o coact ./cmd/coact
 ```
 
+## 参与贡献
+
+欢迎 Fork、提交 bug、范围明确的 PR、新 agent adapter 和文档改进。请先阅读
+[CONTRIBUTING.md](CONTRIBUTING.md)，了解本地测试、安全要求和 review 流程。安全漏洞请
+按照 [SECURITY.md](SECURITY.md) 通过 private advisory 提交，不要公开开 Issue。
+
 MIT —— 见 [LICENSE](LICENSE)。

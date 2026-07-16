@@ -297,4 +297,11 @@ cd coact
 go build -o coact ./cmd/coact
 ```
 
+## Contributing
+
+Forks, bug reports, focused pull requests, agent adapters, and documentation
+improvements are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the local
+test workflow, safety requirements, and review process. Please report security
+issues privately as described in [SECURITY.md](SECURITY.md).
+
 MIT — see [LICENSE](LICENSE).

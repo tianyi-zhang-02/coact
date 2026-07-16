@@ -1,0 +1,67 @@
+name: Bug report
+description: Report reproducible incorrect behavior in CoAct
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Remove credentials, private source code, and raw agent transcripts before submitting.
+  - type: input
+    id: version
+    attributes:
+      label: CoAct version
+      description: Output from `coact version`, commit SHA, or release tag.
+      placeholder: v1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Include the smallest safe sequence of commands or actions.
+      placeholder: |
+        1. Run `coact ...`
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Include relevant `coact doctor`, status, or log output after removing sensitive data.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and pull requests.
+          required: true
+        - label: I removed credentials, private code, and raw transcripts.
+          required: true
+        - label: This is not a security vulnerability requiring a private advisory.
+          required: true

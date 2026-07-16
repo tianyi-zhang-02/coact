@@ -1,0 +1,49 @@
+name: Feature request
+description: Propose a focused improvement to CoAct
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow is difficult today, and who experiences it?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful version of the feature.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Primary area
+      options:
+        - CLI and launchers
+        - Planning and tasks
+        - Memory, messages, or audit
+        - Locks, policy, or worktrees
+        - Local UI and visualization
+        - Agent adapter
+        - Updates and releases
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety and compatibility considerations
+      description: Note permissions, network access, provider terms, platform differences, or migration risks.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and pull requests.
+          required: true
+        - label: I am willing to help test or implement this feature.
+          required: false
