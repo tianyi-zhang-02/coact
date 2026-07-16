@@ -506,7 +506,14 @@ func TestPlanHandlerStartsReviewRunWithoutShell(t *testing.T) {
 
 func TestProjectsAPIAddsAndSwitchesActiveProject(t *testing.T) {
 	dirA := chdirTemp(t)
-	dirB := t.TempDir()
+	dirBParent := t.TempDir()
+	if _, err := setup.Initialize(dirBParent, "human"); err != nil {
+		t.Fatal(err)
+	}
+	dirB := filepath.Join(dirBParent, "uninitialized-child")
+	if err := os.Mkdir(dirB, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	ts := newTestServer(t)
 	defer ts.Close()
 

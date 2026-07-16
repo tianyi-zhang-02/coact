@@ -1123,10 +1123,18 @@ func (s *Server) projectFromRoot(root string) (*project.Project, bool, error) {
 	if !info.IsDir() {
 		return nil, false, fmt.Errorf("%q is not a directory", abs)
 	}
-	if p, err := project.ResolveFrom(abs); err == nil {
+	if coactInfo, err := os.Stat(filepath.Join(abs, ".coact")); err == nil && coactInfo.IsDir() {
+		return &project.Project{Root: abs, CheckoutRoot: abs}, true, nil
+	}
+	if p, err := project.ResolveFrom(abs); err == nil && sameDirectory(p.WorkRoot(), abs) {
 		return p, true, nil
 	}
 	return &project.Project{Root: abs, CheckoutRoot: abs}, false, nil
+}
+
+func sameDirectory(left, right string) bool {
+	rel, err := filepath.Rel(left, right)
+	return err == nil && rel == "."
 }
 
 func (s *Server) activeRootValue() string {
